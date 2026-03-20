@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: stg_weather
+    description: >
+      Ephemeres Staging-Modell für Open-Meteo Wetterdaten.
+      Berechnet Hash-Keys (Data Vault), bereinigt Typen und filtert ungültige Zeilen.
+      Wird nicht materialisiert, sondern direkt als CTE in downstream-Modelle eingefügt.
+    columns:
+      - name: location_hk
+        description: "MD5-Hashkey auf location_key – primärer Hub-Key für den Standort"
+        tests:
+          - not_null
+      - name: location_hashdiff
+        description: "MD5-Hashdiff auf (location_key, latitude, longitude) – prüft ob sich Standortattribute geändert haben"
+        tests:
+          - not_null
+      - name: weather_hashdiff
+        description: "MD5-Hashdiff auf (location_key, timestamp) – eindeutiger Bezeichner je Messung"
+        tests:
+          - not_null
+          - unique
+      - name: measured_at
+        description: "Messzeitpunkt (timestamp, Europe/Berlin)"
+        tests:
+          - not_null
+      - name: date_key
+        description: "Datum der Messung (Partitionierungsspalte aus der Rohtabelle)"
+        tests:
+          - not_null
+      - name: hour
+        description: "Stunde des Tages (0–23)"
+        tests:
+          - not_null
+      - name: location_key
+        description: "Lesbarer Standortbezeichner (z.B. 'berlin-reinickendorf')"
+        tests:
+          - not_null
+      - name: latitude
+        description: "Geografische Breite (double)"
+      - name: longitude
+        description: "Geografische Länge (double)"
+      - name: temperature_2m
+        description: "Temperatur 2m über Boden in °C"
+      - name: apparent_temperature
+        description: "Gefühlte Temperatur in °C"
+      - name: precipitation
+        description: "Niederschlag in mm"
+      - name: windspeed_10m
+        description: "Windgeschwindigkeit 10m über Boden in km/h"
+      - name: weathercode
+        description: "WMO-Wettercode (integer)"
+      - name: relative_humidity_2m
+        description: "Relative Luftfeuchtigkeit 2m über Boden in %"
+      - name: _source_file
+        description: "Pfad zur JSON-Quelldatei in der MinIO Landing Zone"
+      - name: _loaded_at
+        description: "Zeitstempel des Ladevorgangs in die Rohtabelle (UTC)"
+      - name: record_source
+        description: "Datenquelle, fest 'open-meteo'"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['open-meteo']

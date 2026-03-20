@@ -1,0 +1,228 @@
+services:
+  # MinIO S3 Object Storage
+  minio:
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
+    container_name: lakehouse_minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
+      - MINIO_IDENTITY_OPENID_ENABLE=on
+      - MINIO_IDENTITY_OPENID_CONFIG_URL=http://keycloak:8082/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration
+      - MINIO_IDENTITY_OPENID_CLIENT_ID=${KEYCLOAK_CLIENT_ID_MINIO}
+      - MINIO_IDENTITY_OPENID_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET_MINIO}
+      - MINIO_IDENTITY_OPENID_DISPLAY_NAME=Keycloak SSO
+      - MINIO_IDENTITY_OPENID_SCOPES=openid
+      - MINIO_IDENTITY_OPENID_REDIRECT_URI_DYNAMIC=on
+      - MINIO_IDENTITY_OPENID_ROLE_POLICY=consoleAdmin
+      - MINIO_IDENTITY_OPENID_VENDOR=keycloak
+      - MINIO_IDENTITY_OPENID_KEYCLOAK_REALM=${KEYCLOAK_REALM}
+      - MINIO_IDENTITY_OPENID_KEYCLOAK_ADMIN_URL=http://keycloak:8082/admin
+      - MINIO_IDENTITY_OPENID_CLAIM_NAME=policy
+    volumes:
+      - ./storage/data:/data
+    command: server /data --console-address ":9001"
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - lakehouse_network
+
+  # Nessie Catalog
+  nessie:
+    image: projectnessie/nessie:latest
+    container_name: lakehouse_nessie
+    ports:
+      - "19120:19120"
+    environment:
+      - NESSIE_VERSION_STORE_TYPE=ROCKSDB
+    volumes:
+      - ./catalog/conf:/opt/nessie/conf
+    networks:
+      - lakehouse_network
+
+  # Trino Query Engine
+  trino:
+    image: trinodb/trino:latest
+    container_name: lakehouse_trino
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      - KEYCLOAK_URL=${KEYCLOAK_URL}
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM}
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID_TRINO}
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET_TRINO}
+    volumes:
+      - ./trino/etc:/etc/trino
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - lakehouse_network
+
+  # Dremio Query Engine
+  dremio:
+    image: dremio/dremio-oss:latest
+    container_name: lakehouse_dremio
+    ports:
+      - "9047:9047"
+      - "31010:31010"
+    volumes:
+      - ./dremio/data:/opt/dremio/data
+    environment:
+      - DREMIO_MAX_MEMORY_SIZE_MB=4096
+    networks:
+      - lakehouse_network
+
+  # Airflow
+  airflow:
+    build: ./airflow
+    container_name: lakehouse_airflow
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/webserver_config.py:/opt/airflow/webserver_config.py
+      - ./dbt:/opt/dbt
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__WEBSERVER__AUTHENTICATE=True
+      - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.providers.fab.auth_manager.fab_auth_manager
+      - AIRFLOW__WEBSERVER__RBAC=True
+      - KEYCLOAK_URL=http://keycloak:8082
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM}
+      - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
+      - KEYCLOAK_CLIENT_SECRET_AIRFLOW=${KEYCLOAK_CLIENT_SECRET_AIRFLOW}
+    command: bash -c "airflow db init && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com || true && airflow webserver"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    networks:
+      - lakehouse_network
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    build: ./airflow
+    container_name: lakehouse_airflow_scheduler
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/logs:/opt/airflow/logs
+      - ./dbt:/opt/dbt
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - KEYCLOAK_URL=http://keycloak:8082
+      - KEYCLOAK_REALM=${KEYCLOAK_REALM}
+      - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
+      - KEYCLOAK_CLIENT_SECRET_AIRFLOW=${KEYCLOAK_CLIENT_SECRET_AIRFLOW}
+    command: airflow scheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - lakehouse_network
+
+  # Postgres for Airflow and Keycloak
+  postgres:
+    image: postgres:13
+    container_name: lakehouse_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts/postgres-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lakehouse_network
+
+  # Keycloak for Authentication
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    container_name: lakehouse_keycloak
+    ports:
+      - "8082:8082"
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN_USER}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_HTTP_PORT: "8082"
+      KC_HOSTNAME: keycloak
+      KC_HOSTNAME_PORT: "8082"
+      KC_HOSTNAME_STRICT: "false"
+      KC_PROXY: edge
+    command: start-dev --import-realm --health-enabled=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 2 cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    networks:
+      - lakehouse_network
+    volumes:
+      - keycloak_data:/opt/keycloak/data
+      - ./init-scripts/keycloak:/opt/keycloak/data/import
+
+  # MinIO Init: Buckets automatisch anlegen
+  minio-init:
+    image: minio/mc:latest
+    container_name: lakehouse_minio_init
+    depends_on:
+      minio:
+        condition: service_started
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+    volumes:
+      - ./init-scripts/setup_buckets.sh:/setup_buckets.sh:ro
+    entrypoint: ["/bin/sh", "/setup_buckets.sh"]
+    restart: "no"
+    networks:
+      - lakehouse_network
+
+  # Trino Init: Iceberg Namespaces anlegen
+  trino-init:
+    image: curlimages/curl:latest
+    container_name: lakehouse_trino_init
+    depends_on:
+      trino:
+        condition: service_healthy
+    volumes:
+      - ./init-scripts/setup_namespaces.sh:/setup_namespaces.sh:ro
+    entrypoint: ["/bin/sh", "/setup_namespaces.sh"]
+    restart: "no"
+    networks:
+      - lakehouse_network
+
+volumes:
+  postgres_data:
+
+  keycloak_data:
+
+networks:
+  lakehouse_network:
+    driver: bridge

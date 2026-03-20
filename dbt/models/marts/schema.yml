@@ -1,0 +1,44 @@
+version: 2
+
+models:
+  - name: weather_trends
+    description: >
+      Aggregierter Mart für Trend-Analysen, UNION ALL aus drei Granularitäten:
+      - daily:   letzte 90 Tage (Tageswerte)
+      - weekly:  alle Wochen (Wochenmittel)
+      - monthly: alle Monate (Monatsmittel)
+      Direkt für Dashboards (Grafana, Dremio) nutzbar ohne weitere Transformation.
+      Materialisierung: table.
+    columns:
+      - name: location_key
+        description: "Lesbarer Standortbezeichner (z.B. 'berlin-reinickendorf')"
+        tests:
+          - not_null
+      - name: granularity
+        description: "Aggregationsebene: 'daily', 'weekly' oder 'monthly'"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['daily', 'weekly', 'monthly']
+      - name: period_label
+        description: "Lesbares Periode-Label: Datum (daily), 'YYYY-WW' (weekly), 'YYYY-MM' (monthly)"
+        tests:
+          - not_null
+      - name: year
+        description: "Jahr der Aggregationsperiode"
+        tests:
+          - not_null
+      - name: month
+        description: "Monat der Aggregationsperiode (bei weekly: Startmonat der Woche)"
+      - name: week
+        description: "Kalenderwoche (nur bei weekly und daily befüllt)"
+      - name: temp_avg
+        description: "Mittlere Temperatur der Periode in °C"
+      - name: temp_min
+        description: "Minimale Temperatur der Periode in °C"
+      - name: temp_max
+        description: "Maximale Temperatur der Periode in °C"
+      - name: precipitation_total
+        description: "Gesamtniederschlag der Periode in mm"
+      - name: windspeed_avg
+        description: "Mittlere Windgeschwindigkeit der Periode in km/h"

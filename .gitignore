@@ -1,0 +1,47 @@
+# dbt artifacts and cache
+target/
+dbt_packages/
+.dbt/
+
+# Logs
+logs/
+*.log
+
+# Docker volumes and data
+volumes/
+storage/data/
+dremio/data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Airflow specific
+airflow.cfg
+airflow.db
+airflow-webserver.pid
+
+# Environment files
+.env
+.env.local
+
+# Compiled dbt code
+dbt/target/
+
+# OS
+Thumbs.db

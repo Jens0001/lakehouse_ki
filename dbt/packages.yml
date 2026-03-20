@@ -1,0 +1,5 @@
+packages:
+  - git: "https://github.com/Datavault-UK/automate-dv.git"
+  - package: dbt-labs/dbt_utils
+    version: [">=1.0.0", "<2.0.0"]
+

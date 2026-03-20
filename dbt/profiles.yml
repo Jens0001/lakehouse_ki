@@ -1,0 +1,13 @@
+lakehouse_ki:
+  target: dev
+  outputs:
+    dev:
+      type: trino
+      method: none
+      host: trino
+      port: 8080
+      http_scheme: http
+      user: admin
+      catalog: iceberg
+      schema: raw
+      threads: 4

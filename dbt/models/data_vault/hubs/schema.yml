@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: h_location
+    description: >
+      Data Vault Hub für Messstandorte.
+      Enthält ausschließlich den Business Key (location_key) und technische Metadaten.
+      Neue Standorte werden inkrementell ergänzt, bestehende nie überschrieben.
+    columns:
+      - name: location_hk
+        description: "MD5-Hashkey auf location_key – Surrogatschlüssel des Hubs"
+        tests:
+          - not_null
+          - unique
+      - name: location_bk
+        description: "Business Key: lesbarer Standortbezeichner (z.B. 'berlin-reinickendorf')"
+        tests:
+          - not_null
+          - unique
+      - name: load_date
+        description: "Zeitpunkt des erstmaligen Ladens des Standorts (_loaded_at aus der Quelle)"
+        tests:
+          - not_null
+      - name: record_source
+        description: "Herkunftssystem, fest 'open-meteo'"
+        tests:
+          - not_null

@@ -1,0 +1,38 @@
+version: 2
+
+sources:
+  - name: raw
+    database: iceberg
+    schema: raw
+    tables:
+      - name: weather_hourly
+        description: "Stündliche Wetterdaten von Open-Meteo, 1:1 aus Landing Zone geladen"
+        columns:
+          - name: timestamp
+            description: "Zeitstempel der Messung (Europe/Berlin)"
+          - name: date_key
+            description: "Datum (Partitionierungsspalte)"
+          - name: hour
+            description: "Stunde des Tages (0–23)"
+          - name: location_key
+            description: "Standort-Schlüssel (z.B. berlin-reinickendorf)"
+          - name: latitude
+            description: "Geografische Breite"
+          - name: longitude
+            description: "Geografische Länge"
+          - name: temperature_2m
+            description: "Temperatur 2m über Boden (°C)"
+          - name: apparent_temperature
+            description: "Gefühlte Temperatur (°C)"
+          - name: precipitation
+            description: "Niederschlag (mm)"
+          - name: windspeed_10m
+            description: "Windgeschwindigkeit 10m über Boden (km/h)"
+          - name: weathercode
+            description: "WMO Wettercode"
+          - name: relative_humidity_2m
+            description: "Relative Luftfeuchtigkeit 2m über Boden (%)"
+          - name: _source_file
+            description: "Pfad zur Quelldatei in der Landing Zone"
+          - name: _loaded_at
+            description: "Ladezeitpunkt (UTC)"

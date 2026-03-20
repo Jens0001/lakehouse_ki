@@ -1,0 +1,229 @@
+version: 2
+
+models:
+  - name: dim_location
+    description: >
+      Standort-Dimension mit aktuellen Attributen.
+      Kein SCD2: es wird immer nur der neueste Stand aus s_location_details ausgeliefert.
+      Materialisierung: table.
+    columns:
+      - name: location_hk
+        description: "Surrogatschlüssel (MD5) – FK zu h_location, PK dieser Dimension"
+        tests:
+          - not_null
+          - unique
+      - name: location_key
+        description: "Lesbarer Business Key (z.B. 'berlin-reinickendorf')"
+        tests:
+          - not_null
+          - unique
+      - name: latitude
+        description: "Geografische Breite"
+        tests:
+          - not_null
+      - name: longitude
+        description: "Geografische Länge"
+        tests:
+          - not_null
+      - name: valid_from
+        description: "Gültig ab (load_date aus dem Satelliten, neuester Stand)"
+        tests:
+          - not_null
+
+  - name: dim_date
+    description: >
+      Kalender-Dimension für alle Daten von 2020-01-01 bis 2030-12-31 (4018 Zeilen).
+      Materialisierung: TABLE mit täglichem Full Refresh (Airflow DAG, 01:00 Uhr).
+      Relative Felder (is_yesterday, days_ago etc.) sind damit max. 1h veraltet (00:00-01:00 Uhr).
+      Grund: Dremio OSS kann Iceberg Views nicht lesen – physische Tabelle ist Pflicht für Dremio-Anbindung.
+    columns:
+      - name: date_id
+        description: "Surrogatschlüssel im Format YYYYMMDD (integer) – für Joins mit Faktentabellen"
+        tests:
+          - not_null
+          - unique
+      - name: full_date
+        description: "Vollständiges Datum (date)"
+        tests:
+          - not_null
+          - unique
+      - name: year
+        description: "Jahr (integer)"
+        tests:
+          - not_null
+      - name: quarter
+        description: "Quartal (1–4)"
+        tests:
+          - not_null
+      - name: month
+        description: "Monat (1–12)"
+        tests:
+          - not_null
+      - name: month_name
+        description: "Monatsname (z.B. 'January')"
+      - name: week
+        description: "Kalenderwoche (ISO)"
+      - name: day
+        description: "Tag des Monats (1–31)"
+        tests:
+          - not_null
+      - name: weekday_num
+        description: "Wochentagnummer (1 = Montag, 7 = Sonntag)"
+        tests:
+          - not_null
+      - name: weekday_name
+        description: "Wochentagname (z.B. 'Monday')"
+      - name: is_weekend
+        description: "true wenn Samstag oder Sonntag (weekday_num >= 6)"
+      - name: is_today
+        description: "true wenn das Datum dem heutigen Tag entspricht (CURRENT_DATE)"
+      - name: is_yesterday
+        description: "true wenn das Datum gestern war"
+      - name: is_current_week
+        description: "true wenn das Datum in der laufenden Kalenderwoche liegt"
+      - name: is_last_week
+        description: "true wenn das Datum in der letzten Kalenderwoche lag"
+      - name: is_current_month
+        description: "true wenn das Datum im laufenden Monat liegt"
+      - name: is_last_month
+        description: "true wenn das Datum im Vormonat lag"
+      - name: is_current_year
+        description: "true wenn das Datum im laufenden Jahr liegt"
+      - name: is_last_year
+        description: "true wenn das Datum im Vorjahr lag"
+      - name: days_ago
+        description: "Anzahl Tage in der Vergangenheit relativ zu heute (0 = heute, negativ = Zukunft)"
+
+  - name: dim_time
+    description: >
+      Stunden-Dimension mit 24 statischen Zeilen (eine pro Stunde des Tages).
+      Enthält Tagesabschnitt (Nacht/Morgen/Tag/Abend) und is_peak für
+      spätere Stromtarif-Auswertungen.
+      Materialisierung: table.
+    columns:
+      - name: time_id
+        description: "Surrogatschlüssel = Stundenzahl (0–23), identisch mit 'hour'"
+        tests:
+          - not_null
+          - unique
+      - name: hour
+        description: "Stunde des Tages (0–23)"
+        tests:
+          - not_null
+          - unique
+      - name: label
+        description: "Lesbare Stundenbezeichnung (z.B. '08:00')"
+        tests:
+          - not_null
+      - name: period
+        description: "Tagesabschnitt: Nacht (0–5, 22–23), Morgen (6–9), Tag (10–16), Abend (17–21)"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Nacht', 'Morgen', 'Tag', 'Abend']
+      - name: is_peak
+        description: "true für Hochlast-Stunden (7–9 Uhr und 17–21 Uhr) – relevant für Stromtarif-Vergleich"
+
+  - name: fact_weather_hourly
+    description: >
+      Stündliche Wettermessungen pro Standort.
+      Inkrementell befüllt aus s_weather_hourly, verknüpft mit h_location (dim_location),
+      dim_date und dim_time.
+      Granularität: 1 Row pro Standort und Stunde.
+    columns:
+      - name: location_hk
+        description: "FK zu dim_location (und h_location)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_location')
+              field: location_hk
+      - name: date_id
+        description: "FK zu dim_date (YYYYMMDD als integer)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: time_id
+        description: "FK zu dim_time (= Stunde 0–23)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: time_id
+      - name: measured_at
+        description: "Degenerate Dimension: exakter Messzeitpunkt (timestamp)"
+        tests:
+          - not_null
+      - name: date_key
+        description: "Degenerate Dimension: Datum der Messung (für Partitionierung)"
+        tests:
+          - not_null
+      - name: temperature_2m
+        description: "Temperatur 2m über Boden in °C"
+      - name: apparent_temperature
+        description: "Gefühlte Temperatur in °C"
+      - name: precipitation
+        description: "Niederschlag in mm (Stundensumme)"
+      - name: windspeed_10m
+        description: "Windgeschwindigkeit in km/h"
+      - name: weathercode
+        description: "WMO-Wettercode"
+      - name: relative_humidity_2m
+        description: "Relative Luftfeuchtigkeit in %"
+      - name: load_date
+        description: "Ladezeitpunkt (aus dem Satelliten)"
+        tests:
+          - not_null
+      - name: _source_file
+        description: "Quelldatei in der Landing Zone"
+
+  - name: fact_weather_daily
+    description: >
+      Tägliche Wetterkennzahlen, aggregiert aus fact_weather_hourly.
+      Granularität: 1 Row pro Standort und Tag.
+      Inkrementell befüllt: neuer Tag wird ergänzt sobald er in der stündlichen Fact vorliegt.
+    columns:
+      - name: location_hk
+        description: "FK zu dim_location"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_location')
+              field: location_hk
+      - name: date_id
+        description: "FK zu dim_date (YYYYMMDD integer)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: date_key
+        description: "Datum der Aggregation"
+        tests:
+          - not_null
+      - name: temperature_min
+        description: "Minimale Temperatur des Tages in °C"
+      - name: temperature_max
+        description: "Maximale Temperatur des Tages in °C"
+      - name: temperature_avg
+        description: "Mittlere Temperatur des Tages in °C"
+      - name: apparent_temp_min
+        description: "Minimale gefühlte Temperatur des Tages in °C"
+      - name: apparent_temp_max
+        description: "Maximale gefühlte Temperatur des Tages in °C"
+      - name: precipitation_sum
+        description: "Tagessumme Niederschlag in mm"
+      - name: precipitation_hours
+        description: "Anzahl Stunden mit Niederschlag > 0 mm"
+      - name: windspeed_avg
+        description: "Mittlere Windgeschwindigkeit des Tages in km/h"
+      - name: windspeed_max
+        description: "Maximale Windgeschwindigkeit des Tages in km/h"
+      - name: humidity_avg
+        description: "Mittlere relative Luftfeuchtigkeit des Tages in %"
+      - name: load_date
+        description: "Letzter Ladezeitpunkt (max aus den Stundenwerten)"
+        tests:
+          - not_null
