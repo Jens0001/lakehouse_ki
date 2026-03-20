@@ -75,7 +75,7 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
    ```bash
    docker compose up -d --build
    ```
-   `--build` ist erforderlich, da Airflow ein Custom Image nutzt (mit `authlib` für OIDC).
+   `--build` ist erforderlich, da Airflow ein Custom Image nutzt (Java JRE 17, JDBC-Treiber für Oracle & DB2, dbt-trino 1.10.1 und zugehörige Provider).
    Beim ersten Start passiert automatisch:
    - Keycloak importiert Realm `lakehouse` (OIDC-Clients + Test-User)
    - `minio-init` Container legt Buckets `lakehouse` und `airflow-logs` in MinIO an
@@ -98,7 +98,8 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
 | **Nessie Catalog** | http://localhost:19120/api | 19120 | - | Iceberg-Datenkatalog API |
 | **Trino UI** | https://localhost:8443/ui | 8443 | OAuth2 (Keycloak) | SQL Query Engine (HTTPS, Self-Signed Cert) |
 | **Dremio** | http://localhost:9047 | 9047 | admin / Admin1234! | SQL Query Engine (kein OIDC, Enterprise-only) |
-| **Airflow** | http://localhost:8081 | 8081 | OAuth2 (Keycloak) | Workflow-Orchestrierung |
+| **Airflow** | http://localhost:8081 | 8081 | admin / admin | Workflow-Orchestrierung (CLI-created at startup) |
+| **Airflow Scheduler** | – | – | – | DAG Task Execution (kein WebUI) |
 | **PostgreSQL** | localhost:5432 | 5432 | airflow / airflow123 | Interne Datenbank |
 
 ## 🔐 Authentifizierung

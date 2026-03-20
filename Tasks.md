@@ -11,7 +11,7 @@
   - `MINIO_ACCESS_KEY` → `minioadmin`
   - `MINIO_SECRET_KEY` → `minioadmin123`
 - [ ] **DAG `open_meteo_to_raw` triggern** – Backfill ab 2020-01-01 (catchup=True)
-- [ ] **dbt-Pakete installieren** – `docker compose exec airflow bash -c "cd /opt/dbt && dbt deps --profiles-dir /opt/dbt"`
+- ℹ️ **dbt-Pakete** – werden automatisch vom DAG `dbt_run_lakehouse_ki` via `dbt deps` installiert (kein manueller Schritt nötig)
 - [ ] **dbt-Modelle ausführen** – `dbt run` nach erfolgreichem DAG-Lauf
 
 ### Datenquellen (geplant, noch nicht begonnen)

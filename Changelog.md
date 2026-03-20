@@ -82,7 +82,6 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
   - Wird auf der finalen Zielplattform verfügbar sein und sich extern anbinden
 
 ### Geplant
-- Integration mit dbt (Data Build Tool)
 - Monitoring-Stack (Prometheus, Grafana)
 - MLOps-Integration (z.B. MLflow)
 - Backup & Disaster Recovery Setup

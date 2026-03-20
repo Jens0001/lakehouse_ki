@@ -16,7 +16,8 @@ Dieses Dokument hält konzeptuelle Architekturentscheidungen fest, die sich aus 
 | Nessie     | `projectnessie/nessie:latest`               | 19120             | Iceberg Catalog               |
 | Trino      | `trinodb/trino:latest`                      | 8080, 8443 (HTTPS)| Query Engine (Schreiben, dbt) |
 | Dremio     | `dremio/dremio-oss:latest`                  | 9047, 31010       | Query Engine / Semantic Layer |
-| Airflow    | Custom (`build: ./airflow`)                 | 8081→8080         | Orchestrator                  |
+| Airflow    | Custom (`build: ./airflow`) v3.1.8          | 8081→8080         | Orchestrator (API-Server)     |
+| Airflow Scheduler | Custom (`build: ./airflow`) v3.1.8   | –                 | DAG Task Execution             |
 
 ### Startup-Reihenfolge (depends_on)
 
