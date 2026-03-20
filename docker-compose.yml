@@ -90,9 +90,13 @@ services:
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/webserver_config.py:/opt/airflow/webserver_config.py
       - ./dbt:/opt/dbt
+      # JDBC Treiber: Oracle (ojdbc11) und IBM DB2 (db2jcc) – read-only gemountet
+      - ./jdbc_drivers:/opt/jdbc_drivers:ro
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
+      # JDBC CLASSPATH: JayDeBeApi findet die Treiber-JARs über diesen Pfad
+      - CLASSPATH=/opt/jdbc_drivers/ojdbc11.jar:/opt/jdbc_drivers/db2jcc.jar
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
       - AIRFLOW__WEBSERVER__AUTHENTICATE=True
       - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.providers.fab.auth_manager.fab_auth_manager
@@ -119,9 +123,13 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/logs:/opt/airflow/logs
       - ./dbt:/opt/dbt
+      # JDBC Treiber: gleich wie airflow-Service – Scheduler führt die DAG-Tasks aus
+      - ./jdbc_drivers:/opt/jdbc_drivers:ro
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
+      # JDBC CLASSPATH für Scheduler-Tasks
+      - CLASSPATH=/opt/jdbc_drivers/ojdbc11.jar:/opt/jdbc_drivers/db2jcc.jar
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
       - KEYCLOAK_URL=http://keycloak:8082
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
