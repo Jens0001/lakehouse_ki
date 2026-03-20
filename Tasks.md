@@ -3,7 +3,6 @@
 ## Offen
 
 ### Datenquelle 1: Open-Meteo – nächste Schritte
-- [ ] **Stack neu bauen** – `docker compose up -d --build` (wegen `boto3` im Dockerfile)
 - [ ] **Airflow Variables setzen** (Airflow UI → Admin → Variables):
   - `WEATHER_LATITUDE` (z.B. `52.59`)
   - `WEATHER_LONGITUDE` (z.B. `13.35`)
@@ -190,6 +189,10 @@
 | 19.03 | **DAG Airflow 3.x Migration** – `schedule_interval` → `schedule`, Operator-Imports aktualisiert |
 | 19.03 | `dbt_run_lakehouse_ki.py` – BashOperator aus `airflow.providers.standard.operators.bash` |
 | 19.03 | `open_meteo_to_raw.py` – PythonOperator-Import, TrinoOperator entfernt (nicht in 6.5.0) |
+| 20.03 | **Java JRE + JDBC-Treiber** – OpenJDK 17, ojdbc11.jar (Oracle), db2jcc.jar (IBM DB2) |
+| 20.03 | `postgres_public_query.py` – DAG gegen RNAcentral öffentliche PostgreSQL-DB (EBI) |
+| 20.03 | `oracle_jdbc_query.py` – DAG-Template für Oracle via JDBC (pausiert bis Connection gesetzt) |
+| 20.03 | `db2_jdbc_query.py` – DAG-Template für IBM DB2 via JDBC (pausiert bis Connection gesetzt) |
 
 ---
 

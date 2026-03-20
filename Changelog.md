@@ -4,6 +4,27 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Demo-DAGs für Datenbankanbindungen (20.03.2026)
+
+- **`postgres_public_query.py`**: Voll funktionaler DAG gegen RNAcentral (EMBL-EBI, öffentlich)
+  - PostgresHook mit Connection `postgres_rnacentral`
+  - Abfrage: Top-10 Quell-Datenbanken nach RNA-Sequenzanzahl aus `xref`, `database`, `rna`
+  - Pipeline: PostgreSQL → MinIO Landing (`landing/json/rnacentral/`) → `iceberg.raw.rnacentral_stats`
+
+- **`oracle_jdbc_query.py`**: Template-DAG für Oracle über JDBC
+  - JayDeBeApi + ojdbc11.jar (Oracle 19c/21c/23ai), Treiber in `/opt/jdbc_drivers/`
+  - Abfrage: ALL_TABLES Metadaten (Schema, Zeilenanzahl, Blockanzahl)
+  - Pipeline: Oracle → MinIO Landing → `iceberg.raw.oracle_tables`
+  - `is_paused_upon_creation=True` – aktiv sobald Connection `oracle_jdbc` hinterlegt
+
+- **`db2_jdbc_query.py`**: Template-DAG für IBM DB2 über JDBC
+  - JayDeBeApi + db2jcc.jar (DB2 11.5 / Db2 on Cloud), Treiber in `/opt/jdbc_drivers/`
+  - Abfrage: SYSIBM.SYSTABLES Metadaten (Schema, Tabellen, Zeilenanzahl)
+  - Pipeline: DB2 → MinIO Landing → `iceberg.raw.db2_tables`
+  - `is_paused_upon_creation=True` – aktiv sobald Connection `db2_jdbc` hinterlegt
+
+- **Alle DAGs**: Idempotent (DELETE + INSERT per Tag), partitioniert nach `query_date`
+
 ### Airflow 3.1.8 Migration (19.03.2026)
 
 - **Base Image Upgrade**: `apache/airflow:2.8.4-python3.11` → `apache/airflow:3.1.8-python3.11`
