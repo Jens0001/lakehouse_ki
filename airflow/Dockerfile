@@ -1,4 +1,4 @@
-FROM apache/airflow:2.8.4-python3.11
+FROM apache/airflow:3.1.8-python3.11
 
 # 1. Wechsel zu Root, um System-Pakete zu installieren
 USER root
@@ -16,8 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 USER airflow
 
 # 4. Pip-Pakete installieren (Versionen gepinnt für Reproduzierbarkeit)
+# Airflow 3.1.8 mit Airflow 3.x APIs
+# Provider-Versionen für Airflow 3.x (mindestens Major-Version 6 für Trino/HTTP)
 # dbt-trino 1.10.1 benötigt: dbt-core>=1.8.0, dbt-adapters>=1.16, trino~=0.331
 RUN pip install --no-cache-dir \
+    "apache-airflow==3.1.8" \
     authlib \
     boto3 \
     "dbt-core==1.10.9" \
@@ -25,8 +28,8 @@ RUN pip install --no-cache-dir \
     duckdb \
     pandas \
     requests \
-    apache-airflow-providers-trino \
-    apache-airflow-providers-http
+    "apache-airflow-providers-trino>=6,<7" \
+    "apache-airflow-providers-http>=6,<7"
 
 # 5. Patch: dbt-trino 1.10.1 connections.py — Null-Guard für behavior_flags
 #    (cls.behavior_flags ist None beim ersten Aufruf via dbt debug/dbt run)
