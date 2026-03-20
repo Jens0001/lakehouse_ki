@@ -4,6 +4,45 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Airflow 3.1.8 Migration (19.03.2026)
+
+- **Base Image Upgrade**: `apache/airflow:2.8.4-python3.11` → `apache/airflow:3.1.8-python3.11`
+  - **Grund**: Neueste LTS-Version mit erweiterten Features, bessere Python-Unterstützung
+  - **Airflow Version im Container**: 3.1.8 (vorher unreleased Tag 2.11.2)
+
+- **Breaking Changes bewältigt**:
+  - `airflow webserver` → `airflow api-server` (docker-compose.yml command)
+  - `airflow db init` → `airflow db migrate` (database initialization)
+  - Alle Provider-Versionen aktualisiert
+
+- **Provider-Upgrades**:
+  - `apache-airflow-providers-trino:6.5.0` (von 4.x)
+    - ⚠️ **Breaking**: TrinoOperator entfernt—nur TrinoHook verfügbar
+    - Impact: `open_meteo_to_raw.py` nutzt bereits TrinoHook (kein Code-Change nötig)
+  - `apache-airflow-providers-http:6.0.0`
+
+- **DAG Fixes** (`airflow/dags/`):
+  - `dbt_run_lakehouse_ki.py`:
+    - Import: `from airflow.operators.bash` → `from airflow.providers.standard.operators.bash`
+    - Schedule: `schedule_interval="@daily"` bereits korrekt
+    - ✅ Tests bestanden (3 Tasks ausgelesen: dbt_deps, dbt_run, dbt_test)
+  
+  - `open_meteo_to_raw.py`:
+    - Import: `from airflow.operators.python` → `from airflow.providers.standard.operators.python`
+    - Schedule: `schedule_interval="0 6 * * *"` → `schedule="0 6 * * *"`
+    - Removed: `from airflow.providers.trino.operators.trino import TrinoOperator` (nicht in 6.5.0)
+    - TrinoHook-Nutzung in `landing_to_raw()` unverändert (nutzt bereits `TrinoHook.run()`)
+    - ✅ Tests bestanden (2 Tasks ausgelesen: fetch_to_landing, landing_to_raw)
+
+- **dbt-trino Kompatibilität**:
+  - dbt-trino 1.10.1 bleibt stabil (1 Patch in connections.py für behavior_flags null-guard)
+  - Automatische Auflösung: `dbt-adapters>=1.22.9` fixed behavior_flags-Bug nativ
+  - Alle 9 dbt-Modelle PASS (0 Regressions)
+
+- **GitHub Commits**:
+  - Commit 1: Database schema + Layer-Struktur
+  - Commit 2: `fix: migrate open_meteo_to_raw DAG to Airflow 3.x`
+
 ### Dokumentation bereinigt (20.03.2026)
 
 - **`instructions.md` auf Kernanweisungen reduziert**: Technische Inhalte (Service-Tabelle, OIDC-Details, Portabilität) aus instructions.md entfernt – waren Duplikate von Memory.md / KEYCLOAK_SETUP.md / README.md

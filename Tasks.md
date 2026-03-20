@@ -186,6 +186,10 @@
 | 19.03 | Namespaces `raw`, `data_vault`, `business_vault`, `marts` in Trino erstellt |
 | 19.03 | README.md: Layer-Architektur mit Diagramm und Beispielen dokumentiert |
 | 19.03 | Dummy-Modelle entfernt (Ordnerstruktur mit `.gitkeep` erhalten) |
+| 19.03 | **Airflow 2.8.4 → 3.1.8 Migration** – Base Image, Provider-Upgrades (trino 6.5.0) |
+| 19.03 | **DAG Airflow 3.x Migration** – `schedule_interval` → `schedule`, Operator-Imports aktualisiert |
+| 19.03 | `dbt_run_lakehouse_ki.py` – BashOperator aus `airflow.providers.standard.operators.bash` |
+| 19.03 | `open_meteo_to_raw.py` – PythonOperator-Import, TrinoOperator entfernt (nicht in 6.5.0) |
 
 ---
 

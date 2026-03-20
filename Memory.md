@@ -332,6 +332,26 @@ healthcheck:
 
 20. **`docker compose restart` vs `up -d`**: `restart` erstellt Container nicht neu → Port-Änderungen, Image-Änderungen etc. brauchen `up -d`.
 
+### Airflow 3.1.8 Migration (19.03.2026)
+
+21. **TrinoOperator entfernt in apache-airflow-providers-trino 6.5.0**: Airflow 3.x nutzt neues Provider-Modell. TrinoOperator gibt es nicht mehr. **Lösung**: TrinoHook direkt in PythonOperator verwenden (`TrinoHook.run()` statt TrinoOperator).
+
+22. **Breaking Changes in Airflow 3.x**:
+    - `schedule_interval` Parameter in DAG-Definition → Muss zu `schedule` werden
+    - `airflow webserver` → `airflow api-server` (docker-compose command)
+    - `airflow db init` → `airflow db migrate` (database initialization)
+    - Operator-Imports haben sich verändert: `from airflow.operators.bash` → `from airflow.providers.standard.operators.bash`
+
+23. **Import-Migrationsregel für Airflow 3.x**:
+    - `airflow.operators.python` → `airflow.providers.standard.operators.python` (PythonOperator)
+    - `airflow.operators.bash` → `airflow.providers.standard.operators.bash` (BashOperator)
+    - `airflow.operators.http` nicht mehr existent → `airflow.providers.http.operators.http` (SimpleHttpOperator)
+    - Standard-Operatoren sind jetzt in "standard providers" ausgelagert
+
+24. **dbt-trino 1.10.1 bleibt stabil**: Nur 1 Patch nötig (connections.py behavior_flags null-guard). Mit dbt-adapters>=1.22.9 wird der Bug automatisch gefixt—sed-Patch wird umleitbar.
+
+25. **DAG-Parsing unter Airflow 3.1.8**: Nach Import-Fixes können DAGs mit `docker exec airflow python -c "from dags.<dag_name> import dag"` validiert werden. Kein Airflow-CLI nötig für schnelle Checks.
+
 ---
 
 ## ⚙️ Konfiguration & Umgebung

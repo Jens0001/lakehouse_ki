@@ -538,3 +538,76 @@ dbt test --profiles-dir /opt/dbt   # Tests ausführen
 ```
 
 Automatisierung: DAG `dbt_run_lakehouse_ki` in Airflow führt täglich `dbt deps → dbt run → dbt test` aus.
+
+---
+
+## 7. Orchestration – Airflow 3.x Entscheidung
+
+### Warum Airflow 3.1.8 statt 2.8.4?
+
+| Aspekt | Airflow 2.x | Airflow 3.x |
+|--------|------------|------------|
+| **Stabilität** | Etabliert, große Nutzerbasis | LTS möglich (3.1.x) |
+| **Provider-Modell** | Legacy Operatoren | Modernisiert, Standardisierung |
+| **Admin-UI** | Webserver (veraltete Flask-AppBuilder) | API-Server (FastAPI) |
+| **TrinoOperator** | Verfügbar | Entfernt (nutze TrinoHook) |
+| **Deployment** | `airflow webserver` | `airflow api-server` |
+| **Sicherheit** | OAuth2 via FAB | OAuth2 via standard mechanisms |
+| **Zukunftssicherheit** | EOL geplant | Active Development bis mind. 2027 |
+
+**Entscheidung**: Airflow 3.1.8 für moderne Architektur und Zukunftssicherheit.
+
+### Breaking Changes und die Migration
+
+**Änderungen in Airflow 3.1.8** (müssen in DAGs beachtet werden):
+
+1. **DAG-Parameter**: `schedule_interval="..."` → `schedule="..."`
+   - Betrifft: Alle DAGs mit Scheduling
+   - Impact: **Critical** – fehlerhafte DAG-Definitionen
+
+2. **Operator-Imports**: Standardoperatoren haben neue Namespaces
+   - `airflow.operators.bash` → `airflow.providers.standard.operators.bash`
+   - `airflow.operators.python` → `airflow.providers.standard.operators.python`
+   - Impact: **Critical** – DAGs laden nicht
+
+3. **TrinoOperator Entfernung**: `apache-airflow-providers-trino>=6.0`
+   - Alternative: TrinoHook direkt in PythonOperator verwenden
+   - `hook.run(sql_statement)` ersetzt TrinoOperator
+   - Impact: **Medium** – bedingt für DAGs die Trino nutzen
+
+4. **Admin API**: `airflow webserver` → `airflow api-server`
+   - Betrifft: docker-compose services/commands
+   - Impact: **Critical** – Container starten nicht
+
+5. **Datenbank-Initialisierung**: `airflow db init` → `airflow db migrate`
+   - Betrifft: Startup-Sequenz in docker-compose
+   - Impact: **High** – DB nicht initialisiert
+
+### Migration-Strategie und Testplan
+
+✅ **Durchgeführt**:
+1. Dockerfile: `apache/airflow:2.8.4-python3.11` → `apache/airflow:3.1.8-python3.11`
+2. Airflow Version: 3.1.8 (aus apache/airflow base image)
+3. Provider Versions:
+   - `apache-airflow-providers-trino>=6,<7` (TrinoHook nur)
+   - `apache-airflow-providers-http>=6,<7`
+4. dbt-Integration unverändert:
+   - dbt-trino 1.10.1 weiterhin stabil
+   - Alle 9 dbt Models PASS (0 Regressions)
+5. DAG-Fixes:
+   - `dbt_run_lakehouse_ki.py` – BashOperator-Import, Schedule OK
+   - `open_meteo_to_raw.py` – PythonOperator-Import, TrinoHook OK, Schedule gefixt
+6. Validierung: Beide DAGs laden via `python -c "from dags.<dag_name> import dag"` fehlerfrei
+
+### Warum nicht doch Airflow 2.x?
+
+**Optionen erwogen und verworfen**:
+
+| Option | Risiko | Grund der Ablehnung |
+|--------|--------|-------------------|
+| Airflow 2.8.4 beibehalten | **Technisch höher**: Ältere Architektur, EOL absehbar | |
+| Airflow 2.11.2 (unreleased Tag nutzbar) | **Sehr hoch**: Nicht in PyPI, instabil, nicht getestet | Ursprüngliches Setup – NICHT produktiv |
+| Downgrade auf 2.x nach Upgrade zu 3.x | **Hoch**: Code-Churn, doppelter Aufwand | Unnötig; Migration bereits abgeschlossen |
+| **Upgrade zu 3.1.8 percormance** | **Niedrig**: SLA & Architektur verbessert sich | ✅ **GEWÄHLT** |
+
+---
