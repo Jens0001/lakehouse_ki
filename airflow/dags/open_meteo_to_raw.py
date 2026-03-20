@@ -26,8 +26,7 @@ from datetime import datetime, timedelta, date
 import requests
 from airflow import DAG
 from airflow.models import Variable
-from airflow.operators.python import PythonOperator
-from airflow.providers.trino.operators.trino import TrinoOperator
+from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.trino.hooks.trino import TrinoHook
 
 
@@ -238,7 +237,7 @@ with DAG(
     dag_id="open_meteo_to_raw",
     description="Open-Meteo Wetterdaten → Landing Zone → iceberg.raw",
     start_date=datetime(2020, 1, 1),
-    schedule_interval="0 6 * * *",  # täglich 06:00 Uhr – holt den Vortag
+    schedule="0 6 * * *",  # täglich 06:00 Uhr – holt den Vortag (Airflow 3.x: schedule statt schedule_interval)
     catchup=True,                   # für Backfill: einmalig mit catchup=True starten
     max_active_runs=3,              # parallele Backfill-Runs begrenzen
     default_args=DEFAULT_ARGS,
