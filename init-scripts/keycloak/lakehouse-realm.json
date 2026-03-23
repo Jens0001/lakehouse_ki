@@ -526,7 +526,7 @@
     "alwaysDisplayInConsole" : false,
     "clientAuthenticatorType" : "client-secret",
     "secret" : "9NeFEAmQ4u8ZdEenJtjZ1AGkwZJu5Ctk",
-    "redirectUris" : [ "http://localhost:8081/oauth-authorized/keycloak" ],
+    "redirectUris" : [ "http://localhost:8081/auth/oauth-authorized/keycloak" ],
     "webOrigins" : [ "http://localhost:8081" ],
     "notBefore" : 0,
     "bearerOnly" : false,

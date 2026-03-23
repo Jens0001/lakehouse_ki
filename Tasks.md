@@ -3,16 +3,11 @@
 ## Offen
 
 ### Datenquelle 1: Open-Meteo – nächste Schritte
-- [ ] **Airflow Variables setzen** (Airflow UI → Admin → Variables):
-  - `WEATHER_LATITUDE` (z.B. `52.59`)
-  - `WEATHER_LONGITUDE` (z.B. `13.35`)
-  - `WEATHER_LOCATION_KEY` (z.B. `berlin-reinickendorf`)
-  - `MINIO_ENDPOINT` → `http://minio:9000`
-  - `MINIO_ACCESS_KEY` → `minioadmin`
-  - `MINIO_SECRET_KEY` → `minioadmin123`
-- [ ] **DAG `open_meteo_to_raw` triggern** – Backfill ab 2020-01-01 (catchup=True)
+- [x] **Airflow Variables setzen** (Airflow UI → Admin → Variables) *(erledigt 23.03.2026)*
+- [x] **DAG `open_meteo_to_raw` triggern** – Backfill ab 2020-01-01 *(erledigt 23.03.2026, 12.552 stündliche Messwerte geladen)*
 - ℹ️ **dbt-Pakete** – werden automatisch vom DAG `dbt_run_lakehouse_ki` via `dbt deps` installiert (kein manueller Schritt nötig)
-- [ ] **dbt-Modelle ausführen** – `dbt run` nach erfolgreichem DAG-Lauf
+- [x] **dbt-Modelle ausführen** – `dbt run --full-refresh` *(erledigt 23.03.2026, 9 Models PASS)*
+- [x] **dbt-Tests bestehen** – `dbt test` 81/81 PASS *(erledigt 23.03.2026)*
 
 ### Datenquellen (geplant, noch nicht begonnen)
 - [ ] **OpenAQ Luftqualität** (`https://api.openaq.org`) – PM2.5, NO2, CO für Messstationen weltweit
@@ -29,6 +24,17 @@
 ---
 
 ### Metadatenmanagement
+- [x] **OpenMetadata aufsetzen** (3 Services: DB, ES, Server)
+- [x] **Trino-Connector**: 12 Records, 6 Tabellen, 0 Fehler (20.03.2026)
+- [x] **Airflow-Connector**: 27 Records, 5 Pipelines, 0 Fehler (21.03.2026)
+  - Blocker war: Airflow 3.x DAG-Processor braucht eigenen Container → `airflow-dag-processor` Service ergänzt
+- [x] **dbt-Connector**: 83 Records, 10 Modelle, 0 Fehler (21.03.2026)
+  - `catalog.json` via `dbt docs generate` generiert
+  - Beschreibungen, Tags, Lineage und Test-Ergebnisse in OM sichtbar
+- [x] **OM-Ingestion Vollautomatik** (23.03.2026): Alle drei Connectors laufen täglich per Schedule
+  - Trino 03:00, Airflow 02:00, dbt 04:00 UTC
+  - `scripts/om_setup_schedules.py` setzt Schedules nach Stack-Neuanlage
+  - DAG `dbt_run_lakehouse_ki` generiert täglich `catalog.json` via `dbt_docs_generate`-Task
 - [ ] **dbt-Dokumentation generieren und hosten**
   - `dbt docs generate` erzeugt `catalog.json` + `manifest.json`
   - `dbt docs serve` startet lokalen Webserver mit durchsuchbarem Datenkatalog
@@ -69,15 +75,14 @@
 ---
 
 ### Testing der Verarbeitungsstrecke
-- [ ] **dbt-Tests nach erstem `dbt run` ausführen**
+- [x] **dbt-Tests nach erstem `dbt run` ausführen** *(erledigt 23.03.2026 – 81/81 PASS)*
   - `dbt test` führt alle schema.yml-Tests (not_null, unique, relationships, accepted_values) aus
   - `dbt test --select test_type:singular` führt nur die custom Tests in `tests/` aus
-  - Erwartung beim ersten Lauf: completeness-Test schlägt für den aktuellen Tag fehl (< 24h)
+  - Custom Test `assert_hourly_completeness` prüft 24h pro Tag/Standort
 
-- [ ] **dbt-Tests in Airflow-DAG integrieren**
-  - Nach `dbt run` automatisch `dbt test` ausführen
-  - Bei Testfehler: DAG-Task auf `failed` setzen (nicht stillschweigend ignorieren)
-  - Bestehender DAG `dbt_run_lakehouse_ki.py` anpassen
+- [x] **dbt-Tests in Airflow-DAG integrieren** *(bereits im DAG `dbt_run_lakehouse_ki` als Task `dbt_test` enthalten)*
+  - Reihenfolge: `dbt_deps` → `dbt_run` → `dbt_test` → `dbt_docs_generate`
+  - Bei Testfehler: DAG-Task schlägt fehl (BashOperator exit code != 0)
 
 - [ ] **Airflow-DAG-Tests: Idempotenz prüfen**
   - DAG `open_meteo_to_raw` manuell zweimal für denselben Tag triggern
@@ -92,27 +97,31 @@
 ---
 
 ### Data Governance Katalog
-- [ ] **Tool-Evaluation: DataHub vs. OpenMetadata** *(Prio: mittel)*
-  - DataHub: LinkedIn-Herkunft, große Community, ausgereifte Lineage-Graph-UI, aktives Ökosystem
-  - OpenMetadata: Jüngeres Projekt, modernere UI, einfacheres Deployment, integrierte Data Quality-UI
-  - **Must-have Kriterien** (K.O.-Ausschluss wenn nicht erfüllt):
-    - [ ] OpenLineage-Receiver: nimmt Events von Airflow + dbt entgegen (REST-Endpunkt)
-    - [ ] Trino-Connector: crawlt Iceberg-Tabellen inkl. Spaltenmetadaten
-    - [ ] dbt-Integration: importiert `manifest.json` + `catalog.json` (Modellbeschreibungen + Lineage)
-    - [ ] Airflow-Connector: Job-Lineage (DAG → Dataset-Abhängigkeiten)
-  - **Nice-to-have Kriterien**:
-    - Dremio-Connector (VDS-Metadaten)
-    - Integrierte Data Quality Checks
-    - OIDC-Authentifizierung (Keycloak-kompatibel)
-  - Empfehlung erst nach Demo-Setup beider Tools
+- [x] **Tool-Evaluation: DataHub vs. OpenMetadata** *(erledigt 20.03.2026 – Entscheidung: OpenMetadata)*
+  - Begründung: geringerer RAM-Bedarf (3 vs. ~7 Container), nativer DQ-Test-Runner, modernere UI
+  - Details: ARCHITECTURE.md Abschnitt 7.2
 
-- [ ] **Gewählten Katalog in Docker Compose integrieren**
-  - Als eigener Service im Stack (Port separat reservieren, `.env` ergänzen)
-  - OpenLineage-Receiver-Endpunkt aktivieren (Airflow + dbt senden Events hierhin)
-  - Connector zu Trino: Schema-Crawling `iceberg.*` (Tabellen + Spalten + Datentypen)
-  - Connector zu dbt: `manifest.json` + `catalog.json` aus `dbt/target/` importieren
-  - Connector zu Airflow: DAG-Metadaten + Job-Lineage
-  - Connector zu Dremio: VDS-Metadaten *(nachgelagert, wenn VDS genutzt werden)*
+- [x] **OpenMetadata in Docker Compose integrieren** *(erledigt 20.03.2026)*
+  - ✅ 3 Services (`openmetadata-db`, `openmetadata-es`, `openmetadata-server`) im Stack
+  - ✅ Port 8585 reserviert, `.env.example` ergänzt
+  - ✅ OpenLineage-Receiver aktiv (`POST /api/v1/lineage`)
+  - ✅ `OPENMETADATA_DB_PASSWORD=openmetadata123` in `.env` eingetragen (20.03.2026)
+  - **Erster Login**: http://localhost:8585 → admin@open-metadata.org / admin (getestet 20.03.2026)
+  - **Healthcheck-Reihenfolge**: OM-Server startet erst wenn `openmetadata-db` + `openmetadata-es` healthy sind – ES braucht ~30-60s
+
+- [x] **OpenMetadata Ingestion-Container** *(erledigt 20.03.2026)*
+  - ✅ Service `openmetadata-ingestion` (Image `openmetadata/ingestion:1.12.3`) in docker-compose.yml
+  - ✅ OM Pipeline-Client zeigt auf Ingestion-Container (Port 8080 intern, 8090 extern)
+  - ✅ Plugin `openmetadata-managed-apis` wird beim Start installiert (Airflow 3.x kompatibel)
+
+- [x] **OpenMetadata: Connectors konfigurieren** *(erledigt 23.03.2026)*
+  - [x] **Trino-Connector**: Service `lakehouse_trino` angelegt, Ingestion erfolgreich (Tabellen, Schemas, Spalten)
+  - [x] **Trino-Connector triggern**: Läuft automatisch täglich 03:00 UTC + manuell per API
+  - [x] **dbt-Connector**: `manifest.json` + `catalog.json` + `run_results.json` importiert – Beschreibungen, Tags (`dbtTags.hub`, `dbtTags.satellite`), Test-Ergebnisse und Lineage sichtbar
+  - [x] **Airflow-Connector**: DAGs, Tasks, Run-History im Katalog
+  - [ ] **Airflow OpenLineage**: `OPENLINEAGE_URL=http://openmetadata-server:8585` in Airflow-Env setzen *(optional – OM-native Ingestion liefert bereits Lineage)*
+  - [ ] **Dremio-Connector**: VDS-Metadaten crawlen *(nachgelagert, wenn VDS genutzt werden)*
+  - [ ] **Keycloak-OIDC** für OM aktivieren *(optional)*: Anleitung in Memory.md
 
 - [ ] **End-to-End Lineage validieren** *(lückenlose Kette sicherstellen)*
   - [ ] API → Airflow DAG: Open-Meteo als Upstream-Quelle im Katalog sichtbar
@@ -193,6 +202,14 @@
 | 20.03 | `postgres_public_query.py` – DAG gegen RNAcentral öffentliche PostgreSQL-DB (EBI) |
 | 20.03 | `oracle_jdbc_query.py` – DAG-Template für Oracle via JDBC (pausiert bis Connection gesetzt) |
 | 20.03 | `db2_jdbc_query.py` – DAG-Template für IBM DB2 via JDBC (pausiert bis Connection gesetzt) |
+| 23.03 | **Airflow Keycloak SSO** – FAB Auth Manager aktiviert, redirect_uri fix, Default-Rolle Admin |
+| 23.03 | **Airflow `trino_default` Connection** erstellt (trino://airflow@trino:8080, catalog=iceberg, schema=raw) |
+| 23.03 | **DAG `open_meteo_to_raw`** erfolgreich – 12.552 stündliche Wetterdaten (2020–2026) geladen |
+| 23.03 | **dbt `generate_schema_name` Macro** – Schema-Namen ohne `raw_`-Prefix (data_vault, business_vault, marts) |
+| 23.03 | **dbt Deduplizierung** – h_location + s_location_details: SELECT DISTINCT → GROUP BY + MIN(_loaded_at) |
+| 23.03 | **dbt run --full-refresh** – 9 Models PASS, 81/81 Tests PASS |
+| 23.03 | **dbt-Metadaten in OpenMetadata** – Beschreibungen, Tags, Lineage (6 Nodes, 25 Edges) sichtbar |
+| 23.03 | **OM Ingestion-Pipelines** alle 3 getriggert und erfolgreich (Trino, Airflow, dbt) |
 
 ---
 

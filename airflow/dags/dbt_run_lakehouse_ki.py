@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.providers.standard.operators.bash import BashOperator
 from datetime import datetime
 
 with DAG(
@@ -25,4 +25,13 @@ with DAG(
         bash_command="cd /opt/dbt && dbt test --profiles-dir /opt/dbt",
     )
 
-    dbt_deps >> dbt_run >> dbt_test
+    # dbt docs generate erzeugt catalog.json + manifest.json im target/-Verzeichnis.
+    # Diese Artefakte werden vom openmetadata-ingestion-Container täglich um 04:00 UTC
+    # gelesen, um Spaltentypen, Beschreibungen und Tests in OpenMetadata zu aktualisieren.
+    # Das Volume /opt/dbt/target ist in den OM-Ingestion-Container gemountet (docker-compose.yml).
+    dbt_docs_generate = BashOperator(
+        task_id="dbt_docs_generate",
+        bash_command="cd /opt/dbt && dbt docs generate --profiles-dir /opt/dbt",
+    )
+
+    dbt_deps >> dbt_run >> dbt_test >> dbt_docs_generate

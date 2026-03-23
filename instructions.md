@@ -10,6 +10,8 @@ Diese Anweisungen gelten für alle KI-Assistenten, die in diesem Workspace arbei
 
 - **Vor jeder Änderung Bestätigung einholen** – Plan vorstellen, auf OK warten, dann umsetzen.
 - **Alle Codeänderungen ausführlich kommentieren.**
+- Kommentiere code nachvollziehbar und verständlich
+- Der gesamte Softwarestack soll wenn möglich nach dem starten direkt einsetzbar sein. Sollte dies an einer Stelle nicht möglich sein, aktiv darauf hinweisen und unbedingt dokumentieren.
 
 ## Dokumentationspflicht nach jeder Änderung
 

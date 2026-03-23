@@ -4,6 +4,28 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ---
 
+## 🛠️ Gelöste Probleme
+
+### dbt SELECT DISTINCT vs. GROUP BY bei mehrfach geladenen Rohdaten
+
+**Problem**: Data-Vault-Hubs und -Satellites hatten Duplikate trotz `SELECT DISTINCT`, weil `_loaded_at` pro Ladevorgang unterschiedlich war.
+
+**Symptom**: `unique`-Tests auf `location_hk`, `location_bk`, `location_hashdiff` schlugen fehl. Downstream-Fact-Tabelle hatte 112× multiplizierte Zeilen durch JOIN-Explosion.
+
+**Lösung**: `SELECT DISTINCT ... _loaded_at AS load_date` → `GROUP BY ... MIN(_loaded_at) AS load_date`. So wird pro Business-Key / Hashdiff genau eine Zeile erzeugt.
+
+**Betroffene Dateien**: `dbt/models/data_vault/hubs/h_location.sql`, `dbt/models/data_vault/satellites/s_location_details.sql`
+
+**Merke**: Bei Data-Vault-Loads mit mehrfachen Ladevorgängen immer `GROUP BY` statt `SELECT DISTINCT` verwenden, wenn technische Felder wie `_loaded_at` enthalten sind.
+
+### dbt generate_schema_name Macro
+
+**Problem**: dbt-Default-Verhalten hängt den Target-Schema als Prefix an Custom-Schemas an (`raw` + `data_vault` → `raw_data_vault`).
+
+**Lösung**: Custom-Macro `dbt/macros/generate_schema_name.sql` – gibt bei gesetztem `+schema` nur den Custom-Schema-Namen zurück, ohne Prefix.
+
+---
+
 ## 🏗️ Architektur-Entscheidungen (ADRs)
 
 ### ADR-001: OIDC/OAuth2 statt API Keys
@@ -320,6 +342,62 @@ healthcheck:
 
 16. **Enterprise-only**: Dremio OSS hat keinen OIDC/OAuth2-Support. Nur Dremio Enterprise und Dremio Cloud unterstützen SSO/OIDC.
 
+### OpenMetadata (OM) – Konfiguration & Integration
+
+26. **Drei Services, dedizierte Infrastruktur**: OM benötigt eine eigene PostgreSQL-Instanz (`openmetadata-db`) und Elasticsearch (`openmetadata-es`). Die shared postgres (Port 5432) darf NICHT genutzt werden – OM führt eigenständige Flyway-Migrationen durch die mit Airflow/Keycloak kollidieren würden.
+
+27. **Erster Login**: `admin@open-metadata.org` / `admin` (getestet mit AUTHENTICATION_PROVIDER=basic + PostgreSQL, 20.03.2026). In der OM-UI unter Settings → Users → Admin → Edit Password sofort ändern. Das in der OM-Doku genannte Default-Passwort `Admin@1234!` gilt NUR wenn der Server mit dem internen MySQL-Default-Setup startet – bei PostgreSQL mit basic-Auth ist es `admin`.
+
+28. **OpenLineage-Endpunkt**: `POST http://openmetadata-server:8585/api/v1/lineage`
+    - Airflow-Env: `OPENLINEAGE_URL=http://openmetadata-server:8585`
+    - dbt-Adapter: `openlineage_url: http://openmetadata-server:8585` in profiles.yml
+    - Provider installieren: `apache-airflow-providers-openlineage` im Airflow-Dockerfile
+
+29. **Connector-Konfiguration in der OM-UI** (Settings → Services):
+    - **Trino**: Type=Trino, Host=trino, Port=8080, Username=admin (kein Passwort bei OIDC-Auth)
+    - **dbt**: dbt Cloud oder lokale Dateien – `manifest.json` + `catalog.json` aus `dbt/target/`
+    - **Airflow**: Type=Airflow, Host=http://airflow:8080, Auth=admin/admin
+    - **Dremio**: Type=Dremio, Host=dremio, Port=9047 (nachgelagert)
+
+30. **Elasticsearch Version**: OM 1.12.3 bündelt `elasticsearch-java 9.2.4` (shaded). Dieser Client sendet Vendor-Header `Content-Type: application/vnd.elasticsearch+json;compatible-with=8` ohne passenden `Accept`-Header. ES 8.x (alle 8.x Versionen!) lehnt das mit `media_type_header_exception` ab. **Lösung: ES 7.16.3 verwenden** – ES 7.x prüft Vendor-Header nicht. Ein Upgrade auf ES 8.x ist erst möglich, wenn OM den ES-Client-Bug behebt.
+
+31. **CSRF in OM-Ingestion (Airflow 3.x)**: Die FAB Flask-App hat `CSRFProtect` global aktiviert. `AIRFLOW__WEBSERVER__WTF_CSRF_ENABLED=false` wirkt NICHT – die FAB Flask-App liest `webserver_config.py` (Pfad: `[fab] config_file` → `/opt/airflow/webserver_config.py`). Dort muss `WTF_CSRF_ENABLED = False` stehen. Datei: `airflow/webserver_config_ingestion.py`, gemountet als `:ro`.
+
+32. **SERVER_HOST_API_URL**: Im OM-Server muss `SERVER_HOST_API_URL=http://openmetadata-server:8585/api` gesetzt sein. Ohne diese Variable generiert OM Ingestion-DAGs mit `localhost:8585`, was im Container nicht auflöst.
+
+33. **SearchIndexingApplication**: Nach ES-Neustart oder Volume-Löschung muss `POST /api/v1/apps/trigger/SearchIndexingApplication` aufgerufen werden, um die ES-Indizes aus der DB neu aufzubauen. Alternativ in der OM-UI: Settings → Applications → Search Indexing → Run.
+
+34. **Airflow Container-Konsolidierung**: 3 separate Container (api-server, scheduler, dag-processor) zu 1 Container konsolidiert. `dag-processor` auch im OM-Ingestion-Container gestartet (ohne ihn werden keine DAGs geparst → keine DAGs in der UI sichtbar).
+
+35. **RAM-Planung**: Vollständiger Stack mit OM benötigt ~12-16 GB RAM:
+    - Bestehende Services (PG, Keycloak, MinIO, Nessie, Trino, Dremio, Airflow): ~6-8 GB
+    - OpenMetadata (ES 512m + OM-Server ~1 GB + OM-DB ~200 MB): ~2-3 GB
+    - Bei RAM-Engpässen: Dremio vorübergehend stoppen (`docker compose stop dremio`)
+
+#### OpenMetadata OIDC Keycloak (optional, wenn SSO gewünscht)
+
+Um OM an Keycloak anzubinden, folgende Schritte:
+
+1. **Keycloak-Client anlegen** (Realm `lakehouse` → Clients → Create):
+   - Client ID: `openmetadata`
+   - Client Type: Confidential
+   - Valid Redirect URIs: `http://localhost:8585/callback`
+   - Client Secret: aus `.env` (`KEYCLOAK_CLIENT_SECRET_OPENMETADATA`)
+
+2. **docker-compose.yml**: Im `openmetadata-server`-Service `AUTHENTICATION_PROVIDER=basic` ersetzen durch:
+   ```yaml
+   - AUTHENTICATION_PROVIDER=custom-oidc
+   - CUSTOM_OIDC_AUTHENTICATION_PROVIDER_NAME=Keycloak
+   - AUTHENTICATION_AUTHORITY=http://keycloak:8082/realms/lakehouse
+   - AUTHENTICATION_CLIENT_ID=${KEYCLOAK_CLIENT_ID_OPENMETADATA:-openmetadata}
+   - AUTHENTICATION_CALLBACK_URL=http://localhost:8585/callback
+   - AUTHENTICATION_PUBLIC_KEYS=["http://keycloak:8082/realms/lakehouse/protocol/openid-connect/certs","http://localhost:8585/api/v1/system/config/jwks"]
+   ```
+
+3. `docker compose up -d --force-recreate openmetadata-server` ausführen.
+
+4. **OIDC-Discovery-URL** für Debugging: `http://keycloak:8082/realms/lakehouse/.well-known/openid-configuration`
+
 ### Keycloak 26.x Healthcheck
 
 17. **Management-Port 9000**: Keycloak 26.x nutzt Port 9000 für Management-Endpoints (inkl. Health). HTTP-Port 8082 hat KEINEN Health-Endpoint. Aktivierung: `--health-enabled=true`.
@@ -351,6 +429,48 @@ healthcheck:
 24. **dbt-trino 1.10.1 bleibt stabil**: Nur 1 Patch nötig (connections.py behavior_flags null-guard). Mit dbt-adapters>=1.22.9 wird der Bug automatisch gefixt—sed-Patch wird umleitbar.
 
 25. **DAG-Parsing unter Airflow 3.1.8**: Nach Import-Fixes können DAGs mit `docker exec airflow python -c "from dags.<dag_name> import dag"` validiert werden. Kein Airflow-CLI nötig für schnelle Checks.
+
+26. **Airflow 3.x: DAG-Processor ist eigener Prozess** (CRITICAL):
+    - Ab Airflow 3.x läuft der DAG-Processor NICHT mehr im Scheduler. Er ist ein eigenständiger Service: `airflow dag-processor`
+    - Ohne diesen Prozess: `dag`- und `serialized_dag`-Tabellen bleiben leer – Scheduler findet keine DAGs, OM-Ingestion findet keine Pipelines
+    - **Lösung**: Separater Docker-Compose-Service `airflow-dag-processor` mit Command `airflow dag-processor`
+    - `airflow dags list` gibt "No data found" wenn der dag-processor nicht läuft
+
+27. **Airflow 3.x: User Creation ohne CLI**:
+    - `airflow users create` und `airflow fab create-admin` existieren in 3.x nicht mehr
+    - `app.appbuilder.sm` → `AirflowSecurityManagerV2` – hat keine `add_user`/`find_user` Methoden
+    - **Lösung**: `FabAirflowSecurityManagerOverride(app.appbuilder).add_user(...)` explizit instanziieren
+    - Import: `from airflow.providers.fab.auth_manager.security_manager.override import FabAirflowSecurityManagerOverride`
+    - App-Erzeugung: `create_app(enable_plugins=False)` aus `airflow.providers.fab.www.app`
+
+30. **OpenMetadata: Schedule-Konfiguration überlebt keinen Stack-Neuanlage** (CRITICAL):
+    - `docker compose down -v` löscht den `openmetadata_db_data`-Volume – alle OM-Daten incl. Schedules weg
+    - **Lösung**: `scripts/om_setup_schedules.py` nach Stack-Neuanlage einmalig ausführen
+    - Skript ist idempotent (wiederholbar), setzt alle drei Schedules: Airflow 02:00, Trino 03:00, dbt 04:00 UTC
+    - Login: Passwort muss Base64-encodiert übergeben werden (`base64.b64encode(b'admin').decode()`)
+
+31. **dbt-Ingestion benötigt immer aktuelles `catalog.json`**:
+    - `catalog.json` wird NICHT von dbt auto-generiert bei `dbt run` – nur bei `dbt docs generate`
+    - Im DAG `dbt_run_lakehouse_ki` ist ein letzter Task `dbt_docs_generate` ergänzt
+    - Volume-Mount `./dbt/target:/opt/dbt/target:ro` im `openmetadata-ingestion`-Container nötig
+    - Erst nach dem ersten DAG-Lauf ist `catalog.json` vorhanden – bis dahin schlägt OM dbt-Ingestion fehl (graceful, kein Crash)
+
+29. **OpenMetadata dbt-Connector (OM 1.12.3)**:
+    - dbt ist kein eigener OM-Service – es reichert einen bestehenden Datenbank-Service an
+    - `serviceName` muss auf den existierenden OM-Service zeigen (hier: `lakehouse_trino`)
+    - **Korrektes YAML**: `sourceConfig.config.type: DBT` + `dbtConfigSource.dbtConfigType: local`
+    - FALSCH: `type: DBTLocalConfig` oder Dateipfade direkt in sourceConfig.config (nicht verschachtelt)
+    - RICHTIG: Dateipfade unter `dbtConfigSource:` verschachteln
+    - `catalog.json` muss erst via `dbt docs generate` erzeugt werden (ist NICHT in git)
+    - `dbt docs generate` ausführen: `docker exec lakehouse_airflow_scheduler bash -c "cd /opt/dbt && dbt docs generate --profiles-dir . --project-dir ."`
+    - Volume-Mount für Ingestion: `-v /pfad/zu/dbt/target:/opt/dbt/target:ro`
+    - Artefakte: manifest.json (Modell-DAG+Tests), catalog.json (Spalten), run_results.json (Testergebnisse)
+
+28. **OpenMetadata Airflow-Connector (OM 1.12.3)**:
+    - Connector liest Airflow-DB **direkt via SQLAlchemy** – kein REST-API-Aufruf!
+    - Connection-Typ: `Postgres` mit `scheme: postgresql+psycopg2`, `authType: {password: "..."}` (nicht einfaches `password`-Feld)
+    - `hostPort` für den Airflow-Service-Eintrag: URL der Airflow-UI (`http://airflow:8080`) – nur Metadaten, keine API-Calls
+    - Voraussetzung: `serialized_dag`- und `dag`-Tabellen müssen befüllt sein (dag-processor muss laufen)
 
 ---
 
@@ -978,6 +1098,74 @@ command: bash -c "airflow db init && airflow webserver"
 
 ---
 
-**Letzte Aktualisierung**: 18. März 2026, 22:05  
+**Letzte Aktualisierung**: 20. März 2026, 21:45  
 **Sachstandortingredienzen**: 50+ Einträge  
 **Repository**: /Users/jens/git/lakehouse_ki
+
+---
+
+## 🔍 Session 3 - OpenMetadata Ingestion Setup (20. März 2026)
+
+### OM Ingestion-Container
+- **Image**: `docker.getcollate.io/openmetadata/ingestion:1.12.3` (~3 GB, enthält Airflow 3.1.5 + alle OM-Ingestion-Packages)
+- **Plugin**: `openmetadata-managed-apis==1.12.3.0` muss zusätzlich installiert werden (nicht vorinstalliert im Image)
+- **Airflow 3.x Kompatibilität**: Plugin unterstützt `/api/v2/openmetadata/` Endpoint (v2 für Airflow 3.x, v1 für 2.x)
+- **collate-data-diff**: Package `>=0.11.9` existiert nicht auf PyPI für Python 3.9 → lokale Installation scheitert; Docker-Image enthält alles
+- **metadata CLI**: Pfad im Container ist `/home/airflow/.local/bin/metadata` (nicht im System-PATH)
+
+### Trino-Connector
+- **Service Name**: `lakehouse_trino` (OM Service-ID: `462416d7-a94f-4861-839c-bab23b302bfd`)
+- **Ingestion Pipeline ID**: `d81fcfc0-d439-4cf7-9088-15fba2aa577a`
+- **Ergebnis erste Ingestion**: 12 Records, 6 Tabellen, 0 Fehler, 100% Success Rate, 1.6s Laufzeit
+- **hostPort-Pitfall**: OM Ingestion-Client braucht `/api` Suffix: `http://openmetadata-server:8585/api` (Client hängt `v1/...` selbst an → ohne `/api` läuft der health_check auf `/v1/system/version` statt `/api/v1/system/version`)
+- **health_check-Fehler**: `'Response' object is not subscriptable` = URL falsch, Client bekommt HTML statt JSON zurück
+
+### Bot-Token API (OM 1.12.3)
+- Token lesen: `GET /api/v1/users/token/{userId}` → `{"JWTToken": "eyJ..."}`
+- Bot-User-ID: `GET /api/v1/users?limit=50&isBot=true` → Name `ingestion-bot`, ID `371fea1f-...`
+- Bots abrufen: `GET /api/v1/bots/name/ingestion-bot` (gibt Bot-Entity, **nicht** Token)
+- `generateToken` (PUT): **404** in 1.12.3 → existiert nicht mehr
+- Token-Typ: `"tokenType": "BOT"`, Subject: `ingestion-bot`, Expiry: `null` (Unlimited)
+
+### Docker-Compose Änderungen
+- Neuer Service: `openmetadata-ingestion` (Port 8090→8080)
+- Volume: `openmetadata_ingestion_data`
+- OM-Server `PIPELINE_SERVICE_CLIENT_ENDPOINT` geändert: `http://airflow:8080` → `http://openmetadata-ingestion:8080`
+
+---
+
+## 🐛 Session 4 - OM Ingestion-Container Fix (23. März 2026)
+
+### Issue #32: openmetadata-ingestion Container beendet sofort (Exit 0)
+
+**Symptom**: OM-Katalog komplett leer nach `docker compose up`. Container lief laut `docker ps -a` nur kurz.
+
+**Root Cause 1 – Subshell `(cmd &)` verhindert `wait`**:
+```bash
+# FALSCH – Subshell-Prozesse werden nicht als Jobs im Parent-Kontext registriert
+(airflow api-server --port 8080 &)
+wait  # sieht keine Jobs → kehrt sofort zurück
+
+# RICHTIG – direkter Hintergrund-Job
+airflow api-server --port 8080 &
+wait  # wartet auf alle direkten Background-Jobs
+```
+
+**Root Cause 2 – Airflow 3.x SimpleAuthManager zufälliges Passwort**:
+- Airflow 3.1.5 (im OM-Ingestion-Image) nutzt `SimpleAuthManager` statt `FabAuthManager`
+- Beim ersten Start ohne explizite User-Config generiert SimpleAuthManager ein **zufälliges Passwort** (sichtbar in den Logs): `Simple auth manager | Password for user 'admin': gNtk6yrFG8MXebnH`
+- OM-Server versucht `admin/admin` → 401 Unauthorized → Ingestion-Pipelines können nicht getriggert werden
+- Fix: `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin` setzen (Format: `user:role`)
+- Rollen: `admin`, `op`, `user`, `viewer`, `public`
+
+**Root Cause 3 – `airflow users create` in Airflow 3.x entfernt**:
+- Existiert nur für FabAuthManager (Airflow 2.x)
+- In 3.x mit SimpleAuthManager obsolet → Fehler beim Start → Container bricht ab
+
+**Fix**: Alle drei Punkte in `docker-compose.yml` korrigiert + Health-Check auf `/api/v2/monitor/health` (Airflow 3.x) aktualisiert
+
+### Airflow 3.x SimpleAuthManager
+- Config-Key: `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS` (Format: `user:role,user2:role2`)
+- Config-Key: `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=true` → alle definierten User erhalten Admin-Rechte
+- Health-Endpoint: `GET /api/v2/monitor/health` (Response: `{"metadatabase":{"status":"healthy"},"scheduler":{...}}`)
+- Airflow 2.x Health-Endpoint `/health` existiert in 3.x **nicht mehr**

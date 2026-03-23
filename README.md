@@ -80,8 +80,17 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
    - Keycloak importiert Realm `lakehouse` (OIDC-Clients + Test-User)
    - `minio-init` Container legt Buckets `lakehouse` und `airflow-logs` in MinIO an
    - Airflow initialisiert DB + Admin-User
+   - OpenMetadata startet und ist unter http://localhost:8585 erreichbar
 
-4. **Überprüfen, ob alle Services laufen**:
+4. **⚠️ OpenMetadata Ingestion-Schedules einrichten** *(einmalig nach erstem Start oder nach `docker compose down -v`)*:
+   ```bash
+   python3 scripts/om_setup_schedules.py
+   ```
+   Dieser Schritt ist nötig, weil OM-Konfiguration im Volume gespeichert wird und bei einer Neuanlage verloren geht. Das Skript setzt die Cron-Schedules für alle drei Ingestion-Pipelines (Airflow 02:00, Trino 03:00, dbt 04:00 UTC).
+
+   > **Hinweis**: Nach einem normalen `docker compose down && docker compose up` (ohne `-v`) bleiben die Schedules erhalten – das Skript wird dann nicht gebraucht.
+
+5. **Überprüfen, ob alle Services laufen**:
    ```bash
    docker compose ps
    # Oder ausführlicher mit OIDC-Checks:
@@ -98,9 +107,10 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
 | **Nessie Catalog** | http://localhost:19120/api | 19120 | - | Iceberg-Datenkatalog API |
 | **Trino UI** | https://localhost:8443/ui | 8443 | OAuth2 (Keycloak) | SQL Query Engine (HTTPS, Self-Signed Cert) |
 | **Dremio** | http://localhost:9047 | 9047 | admin / Admin1234! | SQL Query Engine (kein OIDC, Enterprise-only) |
-| **Airflow** | http://localhost:8081 | 8081 | admin / admin | Workflow-Orchestrierung (CLI-created at startup) |
-| **Airflow Scheduler** | – | – | – | DAG Task Execution (kein WebUI) |
+| **Airflow** | http://localhost:8081 | 8081 | admin / admin | Workflow-Orchestrierung (api-server + scheduler + dag-processor All-in-One) |
 | **PostgreSQL** | localhost:5432 | 5432 | airflow / airflow123 | Interne Datenbank |
+| **OpenMetadata** | http://localhost:8585 | 8585 | admin@open-metadata.org / admin | Data Governance Katalog (Swagger: /swagger-ui) |
+| **OM Ingestion** | http://localhost:8090 | 8090 | admin / admin | Ingestion Pipeline Runner (Airflow 3.x mini) |
 
 ## 🔐 Authentifizierung
 
@@ -109,7 +119,7 @@ Alle Web-Services nutzen **Keycloak OIDC / OAuth2** zur Authentifizierung:
 ### OIDC-Clients (automatisch konfiguriert)
 
 - **MinIO**: Client-ID `minio`, Redirect `http://localhost:9001/oauth_callback`
-- **Airflow**: Client-ID `airflow`, Redirect `http://localhost:8081/oauth-authorized/keycloak`
+- **Airflow**: Client-ID `airflow`, Redirect `http://localhost:8081/auth/oauth-authorized/keycloak`
 - **Trino**: Client-ID `trino`, Redirect `http://localhost:8080/oauth2/callback`
 - **Dremio**: ❌ Kein OIDC-Support (nur Dremio Enterprise/Cloud)
 
@@ -283,7 +293,62 @@ with DAG(
 
 Dann im Airflow UI aktivieren.
 
-## 🐛 Troubleshooting
+## � Metadaten-Ingestion (OpenMetadata)
+
+OpenMetadata crawlt automatisch alle drei Datenquellen nach folgendem Zeitplan:
+
+| Connector | Schedule (UTC) | Was wird geingestet |
+|-----------|---------------|--------------------|
+| **Trino** (`lakehouse_trino_metadata_ingestion`) | täglich 03:00 | Tabellen, Schemas, Spalten, Tags aus `iceberg.*` |
+| **Airflow** (`lakehouse_airflow_metadata_ingestion`) | täglich 02:00 | DAGs, Tasks, Run-History |
+| **dbt** (`lakehouse_dbt_metadata_ingestion`) | täglich 04:00 | Modell-Beschreibungen, Tests, Lineage, Tags |
+
+**Voraussetzungen nach `docker compose up`**: Keine – alles läuft vollautomatisch.
+
+### Wie es funktioniert
+
+```
+Airflow DAG (dbt_run_lakehouse_ki) läuft täglich @daily:
+  dbt_deps → dbt_run → dbt_test → dbt_docs_generate
+                                       ↓
+                              target/catalog.json aktuell
+
+OM-Ingestion-Container liest täglich um 03/04 Uhr:
+  Trino  (03:00) → Schemas & Tabellen
+  dbt    (04:00) → Beschreibungen, Tests, Lineage aus target/
+  Airflow (02:00) → DAGs & Pipeline-Runs
+```
+
+- Alle drei Ingestion-Schedules sind direkt in OpenMetadata konfiguriert und werden vom `openmetadata-ingestion`-Container (Port 8090) ausgeführt.
+- Das Verzeichnis `dbt/target/` ist per Volume-Mount im OM-Ingestion-Container unter `/opt/dbt/target` eingebunden.
+- Der Airflow-DAG `dbt_run_lakehouse_ki` generiert nach jedem dbt-Lauf mit `dbt docs generate` die aktuellen Artefakte, damit OM stets frische Daten hat.
+
+### Manuell triggern (ad-hoc)
+
+```bash
+# dbt-Artefakte aktualisieren (catalog.json neu generieren)
+docker exec lakehouse_airflow_scheduler bash -c "cd /opt/dbt && dbt docs generate --profiles-dir /opt/dbt"
+
+# Alle drei Ingestion-Pipelines manuell ausführen
+docker run --rm \
+  --network lakehouse_ki_lakehouse_network \
+  -v "$(pwd)/dbt/target:/opt/dbt/target:ro" \
+  -v "$(pwd)/scripts/om_dbt_ingestion.yaml:/tmp/dbt.yaml:ro" \
+  docker.getcollate.io/openmetadata/ingestion:1.12.3 \
+  bash -c "/home/airflow/.local/bin/metadata ingest -c /tmp/dbt.yaml"
+```
+
+### Schedules ändern
+
+Schedules können per API geändert werden (Token aus `docker logs lakehouse_openmetadata_server` oder als Admin-Login-Token):
+
+```bash
+python3 scripts/om_setup_schedules.py
+```
+
+Oder in der OM-UI: **Settings → Services → [Service] → Ingestion → Edit → Schedule**
+
+## �🐛 Troubleshooting
 
 ### Container starten nicht
 ```bash
@@ -361,5 +426,5 @@ Alle verwendeten Komponenten folgen ihren eigenen Open-Source-Lizenzen.
 ---
 
 **Projekt-Status**: 🟡 Laufend (In Development)  
-**Letzte Aktualisierung**: 19. März 2026  
-**Version**: 0.3.0-alpha (dbt + Data Vault 2.0 Layer-Architektur)
+**Letzte Aktualisierung**: 23. März 2026  
+**Version**: 0.4.0-alpha (OpenMetadata Governance Katalog + vollautomatische Ingestion)

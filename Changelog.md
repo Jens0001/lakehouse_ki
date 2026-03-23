@@ -4,6 +4,155 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### dbt Schema-Naming & Deduplizierung (23.03.2026)
+
+- **dbt-Metadaten in OpenMetadata**: dbt-Ingestion-Pipeline manuell getriggert → Beschreibungen, Tags (`dbtTags.hub`, `dbtTags.satellite`), Test-Ergebnisse und **Lineage** sind jetzt im OM-Katalog sichtbar.
+  - Lineage-Graph zeigt vollständige Kette: `raw.weather_hourly` → Data Vault → Business Vault → Marts
+  - Trino-Ingestion ebenfalls neu getriggert um veraltete `raw_*`-Schemas aus dem Katalog zu entfernen
+
+- **Bug**: dbt-Schemas hießen `raw_data_vault`, `raw_business_vault`, `raw_marts` statt `data_vault`, `business_vault`, `marts`
+  - **Root Cause**: dbt konkateniert den Default-Schema aus profiles.yml (`raw`) mit dem Custom-Schema aus dbt_project.yml (`data_vault`) → `raw_data_vault`
+  - **Fix**: Custom-Macro `dbt/macros/generate_schema_name.sql` erstellt – verwendet bei gesetztem `+schema` nur den Custom-Namen, ohne Prefix
+  - Alte `raw_*`-Schemas + Tabellen in Trino gedroppt
+
+- **Bug**: 4 dbt-Tests schlugen fehl (unique_h_location_location_hk, unique_h_location_location_bk, unique_s_location_details_location_hashdiff, assert_hourly_completeness)
+  - **Root Cause**: `h_location.sql` und `s_location_details.sql` nutzten `SELECT DISTINCT`, aber `_loaded_at` variierte pro Ladevorgang → 112 Duplikate pro Standort. Der JOIN in `fact_weather_hourly` multiplizierte dann jede Stunde ×112 (2.688 statt 24 pro Tag).
+  - **Fix**: `SELECT DISTINCT` durch `GROUP BY` + `MIN(_loaded_at)` ersetzt in:
+    - `dbt/models/data_vault/hubs/h_location.sql`
+    - `dbt/models/data_vault/satellites/s_location_details.sql`
+  - `dbt run --full-refresh` → 81/81 Tests PASS
+
+### Elasticsearch 7.x Downgrade & CSRF-Fix (23.03.2026)
+
+- **Bug**: OM-Suche lieferte `media_type_header_exception: Invalid media-type value on headers [Content-Type, Accept]`
+  - **Root Cause**: OM 1.12.3 bündelt `elasticsearch-java 9.2.4` (shaded). Dieser Client sendet `Content-Type: application/vnd.elasticsearch+json;compatible-with=8`, aber vergisst den passenden `Accept`-Header. ES 8.x lehnt das ab.
+  - **Fix**: ES-Image von `8.10.2` auf `7.16.3` downgraded. ES 7.x prüft Vendor-Header nicht.
+  - ES-Volume gelöscht und neu erstellt (alle Indizes waren leer, kein Datenverlust)
+  - Nach ES-Neustart: `SearchIndexingApplication` getriggert (`POST /v1/apps/trigger/SearchIndexingApplication`)
+- **Bug**: OM konnte keine Ingestion-Pipelines deployen → `400: The CSRF token is missing`
+  - **Root Cause**: Airflow 3.x FAB Flask-App hat `CSRFProtect` global aktiviert. Die `openmetadata-managed-apis` Plugin hat einen No-Op `@csrf.exempt` Decorator (funktioniert nicht in Airflow 3.x). `AIRFLOW__WEBSERVER__WTF_CSRF_ENABLED=false` wirkt nicht auf die FAB Flask-App.
+  - **Fix**: Neue Datei `airflow/webserver_config_ingestion.py` mit `WTF_CSRF_ENABLED = False`, gemountet als `/opt/airflow/webserver_config.py` im Ingestion-Container.
+- **Bug**: Ingestion-Pipeline-DAGs nutzten `localhost:8585` als OM-Server-URL → im Container nicht erreichbar
+  - **Fix**: `SERVER_HOST_API_URL=http://openmetadata-server:8585/api` im OM-Server gesetzt
+- **Ergebnis**: Alle 3 Pipelines (Trino, Airflow, dbt) deployen + triggern erfolgreich, 3 Tabellen + 54 Assets im Katalog
+
+### Airflow Container-Konsolidierung (23.03.2026)
+
+- **3 separate Airflow-Container** (`airflow`, `airflow-scheduler`, `airflow-dag-processor`) zu **1 Container** konsolidiert
+  - Einzelner `airflow`-Service startet `api-server`, `scheduler` und `dag-processor` als Background-Jobs
+  - Healthcheck prüft `/api/v2/monitor/health` (alle 3 Komponenten)
+- `dag-processor` zum OM-Ingestion-Container hinzugefügt (fehlte vorher → keine DAGs sichtbar)
+- **Ergebnis**: 3 Container weniger, gleiche Funktionalität, alle 11 Container `healthy`
+
+### OpenMetadata Integration (20.03.2026)
+
+- **3 neue Docker-Compose-Services**: `openmetadata-db`, `openmetadata-es`, `openmetadata-server`
+  - UI erreichbar unter: http://localhost:8585 (**Login: admin@open-metadata.org / admin**)
+  - REST API / Swagger: http://localhost:8585/swagger-ui
+  - OpenLineage-Empfänger aktiv: `POST /api/v1/lineage` (Airflow + dbt senden Events hierhin)
+
+### OpenMetadata Ingestion-Container Bugfix (23.03.2026)
+
+- **Bug**: `openmetadata-ingestion` Container startete nach wenigen Sekunden mit Exit 0 → OM-Katalog blieb leer:
+  1. `(cmd &)` Subshell-Syntax: Hintergrundprozesse waren nicht als Jobs des Parent sichtbar, `wait` hatte nichts zu warten → sofortiger Exit
+  2. Airflow 3.x `SimpleAuthManager` generiert beim ersten Start ein **zufälliges Passwort** – OM-Server konnte sich mit `admin/admin` nicht verbinden
+  3. `airflow users create` existiert in Airflow 3.x nicht mehr (nur für FabAuthManager 2.x)
+- **Fix `docker-compose.yml`**:
+  - `(airflow api-server &)` → `airflow api-server &` (direkte Job-Hintergrundausführung)
+  - `(sleep 5 && airflow scheduler &)` → `sleep 5 && airflow scheduler &`
+  - `airflow users create ...` entfernt
+  - `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin` hinzugefügt
+  - `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=true` hinzugefügt
+  - Health-Check von `/health` (Airflow 2.x) auf `/api/v2/monitor/health` (Airflow 3.x) korrigiert
+- **Ergebnis**: Container läuft dauerhaft als `healthy`, OM kann Ingestion-Pipelines triggern
+
+### OpenMetadata Vollautomatische Ingestion-Schedules (23.03.2026)
+
+- **Alle drei OM-Ingestion-Pipelines haben nun Cron-Schedules** – Stack läuft nach `docker compose up` vollautomatisch:
+  - **Airflow** `lakehouse_airflow_metadata_ingestion`: täglich **02:00 UTC** (DAGs, Tasks, Run-History)
+  - **Trino** `lakehouse_trino_metadata_ingestion`: täglich **03:00 UTC** (Tabellen, Schemas, Spalten)
+  - **dbt** `lakehouse_dbt_metadata_ingestion`: täglich **04:00 UTC** (Beschreibungen, Tests, Lineage)
+- **`scripts/om_setup_schedules.py`** (NEU): Idempotentes Python-Skript das alle drei Schedules per OM-API konfiguriert. Läuft lokal gegen `localhost:8585`. Setzt Schedules zurück nach Stack-Neuanlage.
+- **`scripts/om_dbt_ingestion.yaml`** (NEU): Persistente YAML-Konfiguration für manuelle dbt-Ingestion via `docker run`.
+- **`airflow/dags/dbt_run_lakehouse_ki.py`**: Neuer Task `dbt_docs_generate` am Ende der Pipeline (`dbt_test → dbt_docs_generate`). Generiert täglich frische `catalog.json` im `dbt/target/` Verzeichnis.
+- **`docker-compose.yml`**: Volume-Mount `./dbt/target:/opt/dbt/target:ro` im `openmetadata-ingestion`-Service, damit der OM-Scheduler die dbt-Artefakte lesen kann.
+
+### OpenMetadata dbt-Connector (21.03.2026)
+
+- **dbt-Metadaten erfolgreich nach OpenMetadata ingested (21.03.2026)**:
+  - **83 dbt-Records, 164 OM-Records, 0 Fehler, 100% Success in 2.3s**
+  - Angereichert: 10 Modelle (staging → data_vault → business_vault → marts)
+  - Beschreibungen, Tags und Spalten-Typen aus dbt schema.yml + catalog.json übernommen
+  - Lineage aus manifest.json: dbt-Modell-DAG sichtbar in OM
+  - `run_results.json`: Test-Status (81 Tests) in OM sichtbar
+- **`catalog.json` generiert**: `dbt docs generate` im Airflow-Scheduler-Container ausgeführt → `/opt/dbt/target/catalog.json`
+- **Wichtig: dbt ist kein eigener Service in OM** – es reichert den bestehenden `lakehouse_trino`-Service an (`serviceName: lakehouse_trino`)
+- **Korrektes YAML-Format** (OM 1.12.3):
+  - `sourceConfig.config.type: DBT` (nicht `DBTLocalConfig`)
+  - Dateipfade unter `dbtConfigSource.dbtConfigType: local` verschachteln
+  - `dbtCatalogFilePath`, `dbtManifestFilePath`, `dbtRunResultsFilePath` als Kinder von `dbtConfigSource`
+- **Volume-Mount**: `dbt/target/` als `:ro` in den Ingestion-Container mounten
+
+### OpenMetadata Airflow-Connector + Airflow 3.x DAG-Processor (21.03.2026)
+
+- **Root Cause Airflow 3.x**: In Airflow 3.x ist der DAG-Processor kein integrierter Teil des Schedulers mehr, sondern ein **eigener Prozess** (`airflow dag-processor`). Ohne diesen Prozess werden DAGs nie in die Datenbank serialisiert → OM-Ingestion findet keine Pipelines.
+- **Neuer Service `airflow-dag-processor`** (`container_name: lakehouse_airflow_dag_processor`):
+  - Command: `airflow dag-processor`
+  - Gleiche Volumes wie Scheduler (dags, plugins, logs, dbt, jdbc_drivers)
+  - Gleiche Umgebungsvariablen wie Scheduler
+  - Abhängig von: `postgres` (healthy)
+- **Airflow-Connector in OM erstellt** (Service: `lakehouse_airflow`, ID: `49ee80c2-8f73-42aa-850e-4deddd9fa0e8`):
+  - Ingestion-Pipeline ID: `97bed354-3eb3-406d-9c50-7e193024257b`
+  - Connection: Postgres-Direct `postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow`
+  - Connector liest Airflow-DB **direkt via SQLAlchemy** (kein REST-API-Aufruf)
+  - `authType: {password: "..."}` Format – nicht einfaches `password`-Feld
+- **Erste Airflow-Ingestion erfolgreich (21.03.2026)**:
+  - **27 Records, 0 Fehler, 100% Success in 1.6s**
+  - 5 Pipelines ingested: `db2_jdbc_query`, `dbt_run_lakehouse_ki`, `open_meteo_to_raw`, `oracle_jdbc_query`, `postgres_public_query`
+  - Ausgeführt via: `docker run --rm --network lakehouse_ki_lakehouse_network openmetadata/ingestion:1.12.3`
+
+**Airflow 3.x User Creation Fix (21.03.2026)**:
+- `airflow users create` und `airflow fab` CLI-Commands existieren in Airflow 3.x **nicht mehr**
+- Lösung: `scripts/airflow_init_users.py` – nutzt `FabAirflowSecurityManagerOverride(app.appbuilder).add_user(...)` via `airflow.providers.fab.www.app.create_app(enable_plugins=False)`
+- docker-compose.yml: Init-Command auf `python /opt/airflow/scripts/airflow_init_users.py` umgestellt
+- Volume-Mount: `./scripts/airflow_init_users.py:/opt/airflow/scripts/airflow_init_users.py:ro`
+- Erstellt `admin` / `admin` (Admin-Rolle) bei erstem Start
+
+### OpenMetadata Ingestion-Container + Trino-Connector (20.03.2026)
+
+- **Neuer Service `openmetadata-ingestion`** (`openmetadata/ingestion:1.12.3`): Dedizierter Ingestion-Pipeline-Runner
+  - Eigener Airflow 3.x Mini-Stack mit Scheduler + API-Server
+  - Plugin `openmetadata-managed-apis` wird beim Start automatisch installiert
+  - OM-Server Pipeline-Client zeigt auf diesen Container (statt auf Hauptairflow)
+  - Port: 8090 (extern) → 8080 (intern), Volume: `openmetadata_ingestion_data`
+- **Trino-Connector erstellt und getestet**:
+  - Service `lakehouse_trino` in OM angelegt (Service-ID: `462416d7-a94f-4861-839c-bab23b302bfd`)
+  - Erste Metadata-Ingestion erfolgreich: **12 Records, 6 Tabellen, 0 Fehler, 100% Success**
+  - Crawlt `iceberg.*` Schemas (excl. `information_schema`), inkl. Views und Tags
+  - Ausgeführt via: `docker run --rm --entrypoint /bin/bash --network lakehouse_ki_lakehouse_network openmetadata/ingestion:1.12.3 -c "metadata ingest -c ..."`
+- **YAML-Konfiguration**: `hostPort` muss `/api` Suffix enthalten (`http://openmetadata-server:8585/api`), da OM-Ingestion-Client den `api_version` (`v1`) selbst anhängt
+- **Bot-Token-API**: `GET /api/v1/users/token/{userId}` – nicht `generateToken` (404 in 1.12.3)
+- **collate-data-diff ≥0.11.9**: Nicht auf PyPI für Python 3.9 → lokale pip-Installation scheitert; Docker-Image enthält alle Packages
+- **`openmetadata-db`** (`postgres:15-alpine`): Dedizierte Postgres-Instanz für OM
+  - Bewusst getrennt von shared postgres – OM verwaltet Schema eigenständig via Flyway
+  - Volume: `openmetadata_db_data`
+- **`openmetadata-es`** (`elasticsearch:8.10.2`): Such-Backend für OM
+  - single-node, xpack.security=false, 512 MB Heap (RAM-schonend)
+  - Volume: `openmetadata_es_data`
+- **`openmetadata-server`** (`openmetadata/server:latest`): OM Server
+  - Auth: OM-native (`basic`), Keycloak-OIDC konfigurierbar (Anleitung in Memory.md)
+  - Airflow-Integration: OM kann Ingestion-Workflows als DAGs triggern
+- **`.env.example`**: `OPENMETADATA_DB_USER`, `OPENMETADATA_DB_PASSWORD`, `KEYCLOAK_CLIENT_ID_OPENMETADATA` ergänzt
+- **Hintergrund**: OpenMetadata wurde gegenüber DataHub ausgewählt – weniger RAM-Bedarf (3 vs. 7 Container), nativer DQ-Test-Runner, modernere UI. Abwägung in ARCHITECTURE.md Abschnitt 7.2.
+- **`daemon.json`**: `"ipv6": false` + explizite DNS-Server ergänzt – behebt Docker-Desktop-Bug auf macOS bei Cloudflare R2 Layer-Pulls (`no route to host` über IPv6).
+
+**Bugfixes beim ersten Start (20.03.2026)**:
+- **`DB_SCHEME` korrigiert**: `postgresql+psycopg2` → `postgresql` – OM ist Java, erwartet JDBC-Schema, kein Python/SQLAlchemy-Dialekt.
+- **`DB_DRIVER_CLASS` ergänzt**: `org.postgresql.Driver` explizit gesetzt – OM-Image hat MySQL als Default-Treiber.
+- **`DB_PARAMS` leer gesetzt**: MySQL-spezifische URL-Parameter (`allowPublicKeyRetrieval`, `serverTimezone`) entfernt – PostgreSQL-Treiber kennt diese nicht.
+- **DB-Migration manuell ausgeführt**: `latest`-Tag erzwingt expliziten Migrationsschritt vor erstem Serverstart: `./bootstrap/openmetadata-ops.sh migrate`.
+- **Initialpasswort korrigiert**: OM setzt bei PostgreSQL + basic-Auth `admin` als Passwort (nicht `Admin@1234!` wie in der Doku – das gilt nur beim MySQL-Default-Setup).
+
 ### Demo-DAGs für Datenbankanbindungen (20.03.2026)
 
 - **`postgres_public_query.py`**: Voll funktionaler DAG gegen RNAcentral (EMBL-EBI, öffentlich)

@@ -59,7 +59,7 @@ curl -s -X POST http://keycloak:8080/admin/realms/lakehouse/clients \
     "publicClient": false,
     "clientAuthenticatorType": "client-secret",
     "secret": "airflow-secret-key-12345",
-    "redirectUris": ["http://localhost:8081/oauth-authorized/keycloak"],
+    "redirectUris": ["http://localhost:8081/auth/oauth-authorized/keycloak"],
     "webOrigins": ["http://localhost:8081"],
     "standardFlowEnabled": true,
     "implicitFlowEnabled": false,

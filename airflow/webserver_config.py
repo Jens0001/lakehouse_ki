@@ -15,7 +15,7 @@ AUTH_TYPE = AUTH_OAUTH
 
 # Allow user self-registration via OAuth
 AUTH_USER_REGISTRATION = True
-AUTH_USER_REGISTRATION_ROLE = 'Viewer'
+AUTH_USER_REGISTRATION_ROLE = 'Admin'
 
 # Map Keycloak roles to Airflow roles
 AUTH_ROLES_MAPPING = {

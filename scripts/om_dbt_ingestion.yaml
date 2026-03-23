@@ -1,0 +1,41 @@
+source:
+  type: dbt
+  # dbt ist kein eigener OM-Service – es reichert den bestehenden Trino-Service an.
+  # serviceName muss exakt dem in OM angelegten Database-Service entsprechen.
+  serviceName: lakehouse_trino
+  serviceConnection:
+    config:
+      type: Trino
+      hostPort: trino:8080
+      username: admin
+      catalog: iceberg
+  sourceConfig:
+    config:
+      type: DBT
+      # Dateipfade im openmetadata-ingestion-Container (Volume-Mount: dbt/target -> /opt/dbt/target)
+      dbtConfigSource:
+        dbtConfigType: local
+        # manifest.json: Modell-DAG, Spalten, Tests, Tags, Beschreibungen
+        dbtManifestFilePath: /opt/dbt/target/manifest.json
+        # catalog.json: Spalten-Typen und Row-Counts – wird täglich vom DAG erzeugt
+        dbtCatalogFilePath: /opt/dbt/target/catalog.json
+        # run_results.json: Ergebnisse des letzten dbt-Laufs inkl. Test-Status
+        dbtRunResultsFilePath: /opt/dbt/target/run_results.json
+      # Beschreibungen aus dbt schema.yml in OM-Entities übernehmen
+      dbtUpdateDescriptions: true
+      # dbt-Tags als OM-Classification-Tags anlegen
+      includeTags: true
+sink:
+  type: metadata-rest
+  config: {}
+workflowConfig:
+  loggerLevel: INFO
+  openMetadataServerConfig:
+    # Innerhalb des Docker-Netzwerks erreichbar
+    hostPort: http://openmetadata-server:8585/api
+    authProvider: openmetadata
+    securityConfig:
+      # Bot-Token: GET /api/v1/users/token/371fea1f-50e0-4af1-aed6-a217931bd112
+      # Ablauf: kein Ablauf (exp: null) – bei Bedarf in OM-UI erneuern:
+      # Settings -> Bots -> ingestion-bot -> Revoke & regenerate token
+      jwtToken: eyJraWQiOiJHYjM4OUEtOWY3OS00NzMxLThjNmQtZGJkM2M4ZjRiNGU4IiwiYWxnIjoiUlMyNTYiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJvcGVuLW1ldGFkYXRhLm9yZyIsInN1YiI6ImluZ2VzdGlvbi1ib3QiLCJyb2xlcyI6WyJJbmdlc3Rpb25Cb3RSb2xlIl0sImVtYWlsIjoiaW5nZXN0aW9uLWJvdEBvcGVuLW1ldGFkYXRhLm9yZyIsImlzQm90Ijp0cnVlLCJ0b2tlblR5cGUiOiJCT1QiLCJ1c2VybmFtZSI6ImluZ2VzdGlvbi1ib3QiLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJpbmdlc3Rpb24tYm90IiwiaWF0IjoxNzc0MDMwNzQyLCJleHAiOm51bGx9.lYhD6MVL7ScZ_Z-mQH3Bo6edH-h09YkGEYmnOBHoXE1-j19oUDR6-5tF-cfYbuRTH8GVfzEBvI-o68o-9xSa-SSVl1Wmb8gpUS44hvylocfLU1XrkE0nddw4qPPuMqZWjPYszUZXbq2fxxVrIWIcG_wthXYTEHJYh_y6g9EUGVgMwUcDwHl1kwG633CIb0_V_Ee3FeSVVW7Y2DcoDkSka_bSZHEjrmgy75emj9kHIMneFBPsj2Ik-V4eNsN3HcPJ-TysjdmZh9rxs7J9O_7QbiUIAXZeS_DQ9RYwyQP0pI4bCifIPiLFIVv8DPNR4M0bnaDSoEH2TffBT77PfQ0Mgw

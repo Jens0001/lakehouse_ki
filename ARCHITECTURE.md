@@ -18,12 +18,18 @@ Dieses Dokument hält konzeptuelle Architekturentscheidungen fest, die sich aus 
 | Dremio     | `dremio/dremio-oss:latest`                  | 9047, 31010       | Query Engine / Semantic Layer |
 | Airflow    | Custom (`build: ./airflow`) v3.1.8          | 8081→8080         | Orchestrator (API-Server)     |
 | Airflow Scheduler | Custom (`build: ./airflow`) v3.1.8   | –                 | DAG Task Execution             |
+| Airflow DAG-Processor | Custom (`build: ./airflow`) v3.1.8 | –               | DAG Parsing & Serialization (Airflow 3.x) |
+| OpenMetadata DB  | `postgres:15-alpine`                        | intern            | Dedizierte DB für OM          |
+| OpenMetadata ES  | `elasticsearch:8.10.2`                      | intern            | Such-Backend für OM           |
+| OpenMetadata     | `openmetadata/server:latest`                | 8585, 8586        | Data Governance Katalog       |
+| OpenMetadata Ingestion | `openmetadata/ingestion:1.12.3`       | 8090→8080         | Ingestion Pipeline Runner     |
 
 ### Startup-Reihenfolge (depends_on)
 
 ```
 PostgreSQL (healthcheck) → Keycloak (healthcheck) → MinIO, Trino
 PostgreSQL (healthcheck) → Airflow
+OpenMeta-DB (healthcheck) + OpenMeta-ES (healthcheck) → OpenMetadata → OpenMetadata Ingestion
 ```
 
 **Keycloak Healthcheck**: Port **9000** (Management-Port in Keycloak 26.x), nicht der HTTP-Port 8082.
@@ -131,15 +137,15 @@ Cognos Data Module      →  nur Cognos-Spezifika (Joins, Hierarchien)
 
 ### Datenkatalog
 
-Ein dedizierter Datenkatalog (DataHub oder OpenMetadata) wird in den Stack aufgenommen. Dieser crawlt:
-- Trino (Iceberg-Tabellen + Spaltenmetadaten)
-- dbt (Lineage aus `manifest.json`, Beschreibungen aus `schema.yml`)
-- Airflow (Job-Lineage: welcher DAG füllt welche Tabelle)
-- Dremio (VDS + physische Tabellen)
+**OpenMetadata** wurde als Data Governance Katalog ausgewählt (Entscheidung 20.03.2026, Begründung in Abschnitt 7.2) und unter Port 8585 in den Stack integriert. Dieser crawlt:
+- Trino (Iceberg-Tabellen + Spaltenmetadaten via Trino-Connector)
+- dbt (Lineage aus `manifest.json`, Beschreibungen aus `schema.yml` via dbt-Connector)
+- Airflow (Job-Lineage: welcher DAG füllt welche Tabelle via OpenLineage-Receiver)
+- Dremio (VDS + physische Tabellen via Dremio-Connector, nachgelagert)
 
 Damit wird End-to-End-Lineage (API → Landing → Raw → Data Vault → Business Vault → Marts → Cognos) in einem Tool sichtbar.
 
-> **Konsequenz**: Dremios eingebaute Katalog-UI wird durch den dedizierten Datenkatalog ersetzt. Das ist kein Verlust – der externe Katalog deckt alle Engines gleichzeitig ab.
+> **Konsequenz**: Dremios eingebaute Katalog-UI wird durch OpenMetadata ersetzt. Das ist kein Verlust – OM deckt alle Engines gleichzeitig ab und ergänzt sie um native Data Quality Checks.
 
 ### OpenLineage – Transportprotokoll für Lineage
 
@@ -326,12 +332,20 @@ Mit einem dedizierten Datenkatalog (DataHub/OpenMetadata) entfällt Dremios eing
 
 ### 7.2 Datenkatalog: DataHub vs. OpenMetadata
 
-Beide sind OSS und decken den Stack ab. Noch nicht evaluiert:
+**Entscheidung (20.03.2026): OpenMetadata**
 
-- **DataHub**: LinkedIn-Origin, größere Community, stärkere Lineage-Features
-- **OpenMetadata**: Jüngeres Projekt, modernere UI, einfacheres Deployment
+Kriterien für die Auswahl:
 
-Entscheidung steht aus – wird in Tasks.md erfasst sobald die Evaluation beginnt.
+| Kriterium | OpenMetadata | DataHub |
+|---|---|---|
+| UI-Usability | Moderner, intuitiver | Funktional, komplexer |
+| Data Quality | **Eingebaut** (eigener Test-Runner gegen Trino) | Nur Import von ext. Tools |
+| Docker-Footprint | 3 Container, ~2-3 GB | ~7 Container, ~4-6 GB |
+| RAM-Budget (8 GB Stack) | Knapp, aber machbar | Nicht realistisch |
+| OpenLineage-Receiver | Nativ | Über Bridge aufwändiger |
+| Keycloak-OIDC | Nativ (custom-oidc) | Nativ |
+
+DataHub wäre vorzuziehen bei: sehr großer Community-Abhängigkeit, Column-Level-Lineage-Anforderungen, Domains/Data-Products-Konzept. Für diesen Stack dominiert OM durch geringeren Ressourcenbedarf und integrierten DQ-Test-Runner als klares Alleinstellungsmerkmal.
 
 ### 7.3 Views bei wachsendem Stack
 

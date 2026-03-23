@@ -78,7 +78,13 @@ services:
     networks:
       - lakehouse_network
 
-  # Airflow
+  # ─────────────────────────────────────────────────────────────────────────
+  # Airflow – All-in-One Container (api-server + scheduler + dag-processor)
+  # ─────────────────────────────────────────────────────────────────────────
+  # In einem Dev-Setup ist die Aufteilung auf 3 Container (api-server, scheduler,
+  # dag-processor) unnötig – alle 3 Prozesse laufen hier im Hintergrund.
+  # Airflow 3.x benötigt den dag-processor als separaten Prozess, da DAG-Parsing
+  # nicht mehr im Scheduler integriert ist.
   airflow:
     build: ./airflow
     container_name: lakehouse_airflow
@@ -92,53 +98,46 @@ services:
       - ./dbt:/opt/dbt
       # JDBC Treiber: Oracle (ojdbc11) und IBM DB2 (db2jcc) – read-only gemountet
       - ./jdbc_drivers:/opt/jdbc_drivers:ro
+      # User-Init-Script: Airflow 3.x hat kein 'airflow users create' CLI mehr
+      - ./scripts/airflow_init_users.py:/opt/airflow/scripts/airflow_init_users.py:ro
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
       # JDBC CLASSPATH: JayDeBeApi findet die Treiber-JARs über diesen Pfad
       - CLASSPATH=/opt/jdbc_drivers/ojdbc11.jar:/opt/jdbc_drivers/db2jcc.jar
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
-      - AIRFLOW__WEBSERVER__AUTHENTICATE=True
-      - AIRFLOW__WEBSERVER__AUTH_BACKEND=airflow.providers.fab.auth_manager.fab_auth_manager
-      - AIRFLOW__WEBSERVER__RBAC=True
+      # Airflow 3.x: FAB Auth Manager aktivieren (ersetzt SimpleAuthManager),
+      # damit webserver_config.py mit AUTH_TYPE=AUTH_OAUTH greift → Keycloak-Button
+      - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       - KEYCLOAK_URL=http://keycloak:8082
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
       - KEYCLOAK_CLIENT_SECRET_AIRFLOW=${KEYCLOAK_CLIENT_SECRET_AIRFLOW}
-    command: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@example.com 2>/dev/null || true && airflow api-server"
+    # Airflow 3.x All-in-One Startup:
+    # 1. DB migrieren (idempotent)
+    # 2. Admin-User anlegen via FAB Security Manager (Airflow 3.x hat kein 'airflow users create')
+    # 3. api-server, scheduler und dag-processor als Hintergrundprozesse starten
+    # 4. 'wait' hält den Container am Leben solange mindestens ein Prozess läuft
+    command: >-
+      bash -c "
+        airflow db migrate &&
+        python /opt/airflow/scripts/airflow_init_users.py &&
+        airflow api-server &
+        sleep 3 && airflow scheduler &
+        sleep 3 && airflow dag-processor &
+        wait
+      "
     depends_on:
       postgres:
         condition: service_healthy
       keycloak:
         condition: service_started
-    networks:
-      - lakehouse_network
-
-  # Airflow Scheduler
-  airflow-scheduler:
-    build: ./airflow
-    container_name: lakehouse_airflow_scheduler
-    volumes:
-      - ./airflow/dags:/opt/airflow/dags
-      - ./airflow/plugins:/opt/airflow/plugins
-      - ./airflow/logs:/opt/airflow/logs
-      - ./dbt:/opt/dbt
-      # JDBC Treiber: gleich wie airflow-Service – Scheduler führt die DAG-Tasks aus
-      - ./jdbc_drivers:/opt/jdbc_drivers:ro
-    environment:
-      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
-      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
-      # JDBC CLASSPATH für Scheduler-Tasks
-      - CLASSPATH=/opt/jdbc_drivers/ojdbc11.jar:/opt/jdbc_drivers/db2jcc.jar
-      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
-      - KEYCLOAK_URL=http://keycloak:8082
-      - KEYCLOAK_REALM=${KEYCLOAK_REALM}
-      - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
-      - KEYCLOAK_CLIENT_SECRET_AIRFLOW=${KEYCLOAK_CLIENT_SECRET_AIRFLOW}
-    command: airflow scheduler
-    depends_on:
-      postgres:
-        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v2/monitor/health | grep -q '\"status\":\"healthy\"' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
     networks:
       - lakehouse_network
 
@@ -226,10 +225,209 @@ services:
     networks:
       - lakehouse_network
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # OpenMetadata – Data Governance Katalog (3 Services)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  # Dedizierte PostgreSQL für OpenMetadata.
+  # Bewusst NICHT die shared postgres (Port 5432) – OM verwaltet sein Schema
+  # eigenständig via Flyway (automatische Migration beim Start), was mit den
+  # Migrations-Tabellen von Airflow und Keycloak kollidieren würde.
+  openmetadata-db:
+    image: postgres:15-alpine
+    container_name: lakehouse_openmetadata_db
+    environment:
+      - POSTGRES_USER=${OPENMETADATA_DB_USER:-openmetadata_user}
+      - POSTGRES_PASSWORD=${OPENMETADATA_DB_PASSWORD}
+      - POSTGRES_DB=openmetadata_db
+    volumes:
+      - openmetadata_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${OPENMETADATA_DB_USER:-openmetadata_user} -d openmetadata_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lakehouse_network
+
+  # Elasticsearch als Such- und Indexierungsbackend für OpenMetadata.
+  # OM indiziert alle Assets (Tabellen, Spalten, Pipelines, Tags) in ES –
+  # die Volltextsuche in der UI läuft vollständig über ES-Queries.
+  # single-node: kein Cluster-Setup nötig für lokale Entwicklung.
+  # Xms/Xmx=512m: RAM schonen neben dem restlichen Stack (gesamt ≥12 GB empfohlen).
+  # xpack.security=false: deaktiviert TLS/Auth in ES 8.x für lokalen Betrieb.
+  # ACHTUNG: ES 7.x ist Pflicht! OM 1.12.3 bündelt elasticsearch-java 9.2.4 (shaded),
+  # der Vendor-Header "Content-Type: application/vnd.elasticsearch+json;compatible-with=8"
+  # setzt, aber den passenden Accept-Header weglässt. ES 8.x lehnt das ab mit
+  # "media_type_header_exception". ES 7.x prüft Vendor-Header nicht → funktioniert.
+  openmetadata-es:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.16.3
+    container_name: lakehouse_openmetadata_es
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - openmetadata_es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - lakehouse_network
+
+  # OpenMetadata Server – Governance Katalog UI + REST API.
+  # UI erreichbar unter:        http://localhost:8585  (Login: admin / admin)
+  # OpenMetadata Ingestion-Service: eigenständiger Airflow-3.x-Scheduler als
+  # Ingestion-Pipeline-Runner.  OM's AirflowRESTClient kommuniziert mit diesem
+  # Container (nicht mit dem Hauptairflow), um Ingestion-Pipelines zu deployen
+  # und zu triggern.  Das openmetadata-managed-apis-Plugin wird beim Start
+  # installiert und stellt die /api/v2/openmetadata/* Endpoints bereit.
+  # Erreichbar für manuelle Checks: http://localhost:8090 (Airflow Web-UI intern).
+  # ACHTUNG: Erster Start dauert ca. 2-3 Minuten (DB-Migration + User-Anlage).
+  openmetadata-ingestion:
+    image: docker.getcollate.io/openmetadata/ingestion:1.12.3
+    container_name: lakehouse_openmetadata_ingestion
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        # openmetadata-managed-apis stellt den /api/v2/openmetadata/* Endpoint bereit,
+        # den OM-Server zum Triggern von Ingestion-Pipelines verwendet.
+        pip install --quiet "openmetadata-managed-apis==1.12.3.0" 2>/dev/null &&
+        # DB-Schema anlegen / migrieren (idempotent)
+        airflow db migrate &&
+        # api-server und scheduler direkt als Jobs starten (kein Subshell-Wrapper!).
+        # Wichtig: (cmd &) würde die Jobs in einem eigenen Subshell-Kontext starten,
+        # den nachfolgenden 'wait' nicht erreichen – Container würde sofort mit Exit 0 enden.
+        airflow api-server --port 8080 &
+        sleep 5 && airflow scheduler &
+        sleep 5 && airflow dag-processor &
+        # Auf alle Hintergrund-Jobs warten → Container bleibt dauerhaft am Leben
+        wait
+    environment:
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=false
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=true
+      # Airflow 3.x nutzt SimpleAuthManager mit zufällig generiertem Passwort.
+      # Diese Variable setzt admin:admin als festes Passwort, das OM-Server erwartet.
+      # Format: "user:role" – verfügbare Rollen: admin, op, user, viewer, public
+      - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS=admin:admin
+      - AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=true
+      # CSRF deaktivieren: OM-Server sendet API-Requests (kein Browser-Formular),
+      # Flask-WTF CSRF-Protection blockiert sonst POST /pluginsv2/api/v2/openmetadata/deploy
+      - AIRFLOW__WEBSERVER__WTF_CSRF_ENABLED=false
+      - AIRFLOW_HOME=/opt/airflow
+      - OPENMETADATA_SERVER_URL=http://openmetadata-server:8585/api
+    ports:
+      - "8090:8080"   # Ingestion-Airflow Web-UI (externe Port 8090 = kein Konflikt mit Hauptairflow)
+    volumes:
+      - openmetadata_ingestion_data:/opt/airflow
+      # webserver_config.py: Setzt WTF_CSRF_ENABLED=False für die FAB Flask-App,
+      # damit OM-Server POST-Requests an /pluginsv2/api/v2/openmetadata/* senden kann.
+      - ./airflow/webserver_config_ingestion.py:/opt/airflow/webserver_config.py:ro
+      # dbt-Artefakte (manifest.json, catalog.json, run_results.json) für dbt-Connector
+      # Diese Dateien werden täglich durch den DAG dbt_run_lakehouse_ki (Task: dbt_docs_generate) aktualisiert
+      - ./dbt/target:/opt/dbt/target:ro
+    depends_on:
+      openmetadata-server:
+        condition: service_healthy
+    healthcheck:
+      # Airflow 3.x: /health existiert nicht mehr – korrekter Endpunkt ist /api/v2/monitor/health
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v2/monitor/health | grep -q '\"status\":\"healthy\"' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+    networks:
+      - lakehouse_network
+
+  # Swagger API:                 http://localhost:8585/swagger-ui
+  # OpenLineage-Endpunkt:       POST http://openmetadata-server:8585/api/v1/lineage
+  #   → Airflow-Env setzen:     OPENLINEAGE_URL=http://openmetadata-server:8585
+  #   → dbt profiles.yml:       openlineage_url: http://openmetadata-server:8585
+  # Keycloak-OIDC aktivieren:   AUTHENTICATION_PROVIDER=custom-oidc setzen +
+  #                              Variablen aus Memory.md → "OpenMetadata OIDC Keycloak"
+  openmetadata-server:
+    image: docker.getcollate.io/openmetadata/server:latest
+    container_name: lakehouse_openmetadata_server
+    ports:
+      - "8585:8585"   # OM Web UI + REST API (Swagger unter /swagger-ui)
+      - "8586:8586"   # OM Admin-API (Metrics, Health-Checks)
+    environment:
+      # ── Datenbank (dedizierte OM-PostgreSQL) ─────────────────────────────
+      # DB_SCHEME muss das JDBC-Schema sein ("postgresql"), NICHT das Python/SQLAlchemy-Schema
+      # ("postgresql+psycopg2") – OM ist eine Java-App und baut intern jdbc:postgresql://... URLs.
+      # DB_DRIVER_CLASS überschreibt den MySQL-Default des Images auf den PostgreSQL JDBC-Treiber.
+      # DB_PARAMS: MySQL-spezifische Parameter (allowPublicKeyRetrieval, serverTimezone) entfernen –
+      #            der PostgreSQL JDBC-Treiber kennt diese nicht.
+      - DB_HOST=openmetadata-db
+      - DB_PORT=5432
+      - DB_DRIVER_CLASS=org.postgresql.Driver
+      - DB_SCHEME=postgresql
+      - DB_PARAMS=
+      - DB_USER=${OPENMETADATA_DB_USER:-openmetadata_user}
+      - DB_USER_PASSWORD=${OPENMETADATA_DB_PASSWORD}
+      - OM_DATABASE=openmetadata_db
+      # ── Elasticsearch ────────────────────────────────────────────────────
+      - SEARCH_TYPE=elasticsearch
+      - ELASTICSEARCH_HOST=openmetadata-es
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
+      # ── Authentifizierung: OM-native Auth (kein externer IdP) ────────────
+      # Erster Login: admin@open-metadata.org / admin
+      # (NICHT Admin@1234! – das gilt nur beim MySQL-Default-Setup. Bei PostgreSQL
+      #  setzt OM "admin" als Initialpasswort. In der UI unter Settings → Users ändern!)
+      # Keycloak-OIDC aktivieren: AUTHENTICATION_PROVIDER=custom-oidc setzen
+      # und die Variablen aus Memory.md → "OpenMetadata OIDC Keycloak" eintragen.
+      - AUTHENTICATION_PROVIDER=basic
+      - JWT_ISSUER=open-metadata.org
+      - JWT_KEY_ID=Gb389A-9f79-4731-8c6d-dbd3c8f4b4e8
+      # ── Autorisierung ────────────────────────────────────────────────────
+      - AUTHORIZER_CLASS_NAME=org.openmetadata.service.security.DefaultAuthorizer
+      - AUTHORIZER_REQUEST_FILTER=org.openmetadata.service.security.JwtFilter
+      # OM-Usernames mit Admin-Rechten (komma-separiert, keine Leerzeichen)
+      - AUTHORIZER_ADMIN_PRINCIPALS=[admin]
+      - AUTHORIZER_PRINCIPAL_DOMAIN=open-metadata.org
+      # ── Ingestion-Pipeline-Runner (openmetadata-ingestion statt Hauptairflow) ──
+      # OM triggert Ingestion-Pipelines über diesen dedizierten Mini-Airflow.
+      # Airflow 3.x: Plugin-Endpoint ist /api/v2/openmetadata/ (v2 für Airflow 3.x).
+      # Der Ingestion-Container hat alle openmetadata-ingestion Python-Packages
+      # bereits gebündelt (inkl. private Collate-Packages die nicht auf PyPI sind).
+      - PIPELINE_SERVICE_CLIENT_CLASS_NAME=org.openmetadata.service.clients.pipeline.airflow.AirflowRESTClient
+      - PIPELINE_SERVICE_CLIENT_ENDPOINT=http://openmetadata-ingestion:8080
+      - PIPELINE_SERVICE_CLIENT_VERIFY_SSL=no-ssl
+      - PIPELINE_SERVICE_CLIENT_USERNAME=admin
+      - PIPELINE_SERVICE_CLIENT_PASSWORD=admin
+      # URL unter der der OM-Server aus dem Ingestion-Container erreichbar ist.
+      # Ohne diese Variable generiert OM DAGs mit localhost:8585, was im Container nicht auflöst.
+      - SERVER_HOST_API_URL=http://openmetadata-server:8585/api
+    depends_on:
+      openmetadata-db:
+        condition: service_healthy
+      openmetadata-es:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8585/api/v1/system/version 2>/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 90s
+    networks:
+      - lakehouse_network
+
 volumes:
   postgres_data:
 
   keycloak_data:
+
+  # OpenMetadata: dedizierte Volumes (getrennt von Airflow/Keycloak-Volumes)
+  openmetadata_db_data:
+
+  openmetadata_es_data:
+
+  openmetadata_ingestion_data:
 
 networks:
   lakehouse_network:
