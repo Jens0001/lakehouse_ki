@@ -13,10 +13,83 @@
 - [ ] **OpenAQ Luftqualität** (`https://api.openaq.org`) – PM2.5, NO2, CO für Messstationen weltweit
 - [ ] **CoinGecko Krypto-Kurse** (`https://api.coingecko.com`) – stündliche/tägliche Preise
 
+### Datenquelle 3: Spotify Charts & Artists – nächste Schritte
+
+#### Voraussetzungen
+- [ ] **Kaggle-Datasets herunterladen** und als CSV nach MinIO hochladen:
+  - `mc cp spotify_tracks.csv lakehouse/lakehouse/landing/csv/spotify/tracks/`
+  - `mc cp spotify_charts.csv lakehouse/lakehouse/landing/csv/spotify/charts/`
+  - Empfohlene Datasets:
+    - Tracks: https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset
+    - Charts: https://www.kaggle.com/datasets/dhruvildave/spotify-charts
+- [ ] **Spotify Developer App erstellen** → Client ID + Client Secret
+  - https://developer.spotify.com/dashboard → App erstellen → Client Credentials notieren
+- [ ] **Airflow Variables setzen** (Airflow UI → Admin → Variables):
+  - `SPOTIFY_CLIENT_ID` = (Spotify App Client ID)
+  - `SPOTIFY_CLIENT_SECRET` = (Spotify App Client Secret)
+
+#### Bulk-Load (einmalig)
+- [ ] **DAG `spotify_initial_load` triggern** – Lädt Tracks + Charts CSVs → iceberg.raw
+  - Voraussetzung: CSVs liegen in MinIO unter `landing/csv/spotify/`
+  - Zwei parallele Tasks: `load_tracks_to_raw`, `load_charts_to_raw`
+- [ ] **Verifikation in Trino**:
+  ```sql
+  SELECT count(*) FROM iceberg.raw.spotify_tracks;
+  SELECT count(*) FROM iceberg.raw.spotify_charts;
+  SELECT count(distinct region) FROM iceberg.raw.spotify_charts;
+  ```
+
+#### Artist Enrichment (wöchentlich)
+- [ ] **DAG `spotify_artist_update` triggern** – Erster manuelle Run für Baseline
+  - Holt alle distinct artist_name → Spotify Search API → Artist-Snapshots
+  - Schreibt nach `iceberg.raw.spotify_artist_snapshots`
+- [ ] **Verifikation**:
+  ```sql
+  SELECT count(*) FROM iceberg.raw.spotify_artist_snapshots;
+  SELECT artist_name, popularity, followers FROM iceberg.raw.spotify_artist_snapshots LIMIT 10;
+  ```
+
+#### dbt-Modelle ausführen
+- [ ] **dbt run** – `dbt run --select stg_spotify_track+` (oder `dbt run --full-refresh` für alle)
+  - Neue Modelle: h_track, h_artist, h_country, l_track_artist, s_track_details,
+    s_track_audio_features, s_artist_profile, s_chart_entry, dim_artist (SCD2!),
+    dim_track, dim_country, fact_chart_entry, artist_chart_performance
+- [ ] **dbt test** – `dbt test --select stg_spotify_track+` → alle Tests grün prüfen
+- [ ] **SCD2-Validierung** (nach zweitem `spotify_artist_update`-Run):
+  ```sql
+  -- Muss historische Rows zeigen (is_current = false)
+  SELECT * FROM iceberg.business_vault.dim_artist WHERE NOT is_current ORDER BY artist_name LIMIT 20;
+  -- Versionsverlauf eines populären Artists
+  SELECT * FROM iceberg.business_vault.dim_artist WHERE artist_name LIKE '%Drake%' ORDER BY valid_from;
+  ```
+
+
+- [ ] **Airflow Variable setzen** (Airflow UI → Admin → Variables): `ENERGY_CHARTS_BIDDING_ZONE = DE-LU`
+- [ ] **DAG `energy_charts_to_raw` triggern** – Backfill ab 2018-10-01 (ältestes verfügbares Datum für DE-LU)
+  - Hinweis: `max_active_runs=3` begrenzt parallele Runs; Backfill läuft ca. 2.700 Tage durch
+  - Idempotent: kann jederzeit erneut getriggert werden
+- [ ] **dbt-Modelle ausführen** – `dbt run --select stg_energy_price+` (oder full-refresh)
+  - Neue Modelle: `h_price_zone`, `s_energy_price_hourly`, `dim_price_zone`,
+    `fact_energy_price_hourly`, `fact_energy_price_daily`, `fact_energy_price_monthly`, `energy_price_trends`
+- [ ] **dbt-Tests** – `dbt test --select stg_energy_price+` → alle Tests grün prüfen
+- [ ] **Verifikation in Trino**:
+  ```sql
+  SELECT count(*) FROM iceberg.raw.energy_price_hourly WHERE date_key = DATE '2024-01-01';
+  -- erwartet: 24
+  SELECT * FROM iceberg.marts.energy_price_trends LIMIT 10;
+  ```
+
+  - [x] **Neues Modell `fact_energy_price_monthly` implementiert** (24.03.2026)
+    - Erstellt auf Basis von `fact_energy_price_daily`
+    - Aggregiert stündliche Daten monatsweise
+    - Enthält Min, Max, Durchschnitt und Standardabweichung pro Monat und Gebotszone
+    - Wird in `business_vault` abgelegt
+    - Dokumentation in `schema.yml` aktualisiert
+    - In Tasks.md als erledigt markiert
 ### Use Cases (niedrige Priorität)
-- [ ] **Hypothetischer Stromtarif-Vergleich** *(Prio: niedrig)*
-  - Quelle: Energy-Charts API (`https://api.energy-charts.info/price?bzn=DE-LU`) – kein Key, historisch bis ~2015
-  - Stündliche Day-Ahead-Spotpreise (€/MWh) für DE-LU rückwirkend laden (Backfill)
+- [ ] **Hypothetischer Stromtarif-Vergleich** *(Prio: niedrig, Abhängigkeit: Smarthome-Verbrauchsdaten in Iceberg)*
+  - Preisdaten jetzt verfügbar: `iceberg.business_vault.fact_energy_price_hourly` (ab 2018-10-01)
+  - Noch fehlend: stündliche Verbrauchsdaten aus `airflow_smarthome` in Iceberg laden
   - Join mit eigenem Smarthome-Stromverbrauch (stündlich)
   - Star-Schema: `dim_time`, `dim_tariff` (fix vs. dynamisch), `fact_consumption_cost`
   - Mart: `tariff_comparison` – hypothetische Kosten fix vs. dynamisch im Vergleich
@@ -157,6 +230,17 @@
   - `KEYCLOAK_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, alle `CLIENT_SECRET_*`
   - `.env.example` mit `CHANGE_ME_*` Platzhaltern liegt als Vorlage bereit
 
+- [ ] **Reverse Proxy + DNS für produktionsnahen Betrieb** *(Prio: niedrig)*
+  - **Traefik** als Reverse Proxy: ein Einstiegspunkt (Port 443), automatisches TLS, Host-basiertes Routing
+    - `minio.lakehouse.internal:443` → MinIO :9001
+    - `airflow.lakehouse.internal:443` → Airflow :8081
+    - `trino.lakehouse.internal:443` → Trino :8443
+    - `keycloak.lakehouse.internal:443` → Keycloak :8082
+  - **dnsmasq** (lokaler DNS): Wildcard `*.lakehouse.internal` → VM-IP (löst `/etc/hosts`-Requirement ab)
+  - **Eigene CA** (cfssl/mkcert): Wildcard-Zertifikat `*.lakehouse.internal` → alle Services HTTPS
+  - Eliminiert: manuelle `/etc/hosts`-Einträge, Split-DNS-Problem, Port-Nummern in URLs
+  - Voraussetzung: Air-gapped Netzwerk oder eigener DNS-Server
+
 - [ ] **Dremio Data Sources konfigurieren** *(Voraussetzung für alle Dremio-Tests)*
   - MinIO als S3-Source hinzufügen (Endpoint: `http://minio:9000`, Access/Secret Key aus `.env`)
   - Nessie Catalog als Quelle einbinden (Endpoint: `http://nessie:19120/api/v1`)
@@ -210,6 +294,7 @@
 | 23.03 | **dbt run --full-refresh** – 9 Models PASS, 81/81 Tests PASS |
 | 23.03 | **dbt-Metadaten in OpenMetadata** – Beschreibungen, Tags, Lineage (6 Nodes, 25 Edges) sichtbar |
 | 23.03 | **OM Ingestion-Pipelines** alle 3 getriggert und erfolgreich (Trino, Airflow, dbt) |
+| 23.03 | **EXTERNAL_HOST** – Remote-Zugriff via `start.sh` + `update-keycloak-redirects.sh` |
 
 ---
 

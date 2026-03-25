@@ -3,6 +3,11 @@
 }}
 
 -- dim_location: aktuelle Standort-Dimension (kein SCD2, immer letzter Stand)
+--
+-- location_sk: Surrogate Key = md5(location_hk || '|' || valid_from)
+--   → deterministisch, idempotent, eindeutig pro Dimensionsversion
+--   → SCD2-fähig: bei Einführung von SCD2 entsteht pro Version ein neuer SK
+-- location_hk: bleibt als Referenz zum Data Vault Hub (h_location) erhalten
 
 with ranked as (
     select
@@ -21,6 +26,10 @@ with ranked as (
 )
 
 select
+    -- Surrogate Key: eindeutiger Dimensionsschlüssel (PK)
+    {{ generate_dimension_sk(['location_hk', 'valid_from']) }} as location_sk,
+
+    -- Hub-Referenz (FK zurück zum Data Vault)
     location_hk,
     location_key,
     latitude,

@@ -7,6 +7,8 @@
 }}
 
 -- fact_weather_daily: Tagesaggregation aus fact_weather_hourly
+--
+-- location_sk wird aus der stündlichen Faktentabelle durchgereicht (dort per Join auf dim_location gesetzt).
 
 with hourly as (
     select * from {{ ref('fact_weather_hourly') }}
@@ -18,7 +20,8 @@ with hourly as (
 
 select
     -- FKs
-    location_hk,
+    location_sk,                        -- FK → dim_location (Surrogate Key)
+    location_hk,                        -- Referenz → h_location (Hub Hash Key)
     date_id,
     date_key,
 
@@ -44,4 +47,4 @@ select
     max(load_date)              as load_date
 
 from hourly
-group by location_hk, date_id, date_key
+group by location_sk, location_hk, date_id, date_key

@@ -6,6 +6,29 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ## 🛠️ Gelöste Probleme
 
+### Spotify-Pipeline: Kaggle-Artist-Name vs. Spotify-Artist-ID (24.03.2026)
+
+**Problem**: Das Kaggle-Tracks-Dataset enthält keine `artist_id` – nur `artist_name` als Text. Die Spotify API liefert dagegen eine zuverlässige `artist_id`. Beide Quellen speisen den Hub `h_artist`, aber mit unterschiedlichen Business Keys.
+
+**Lösung**:
+- `h_artist` verwendet UNION ALL aus beiden Quellen
+- Kaggle-artist_hk basiert auf `lower(trim(artist_name))`, API-artist_hk auf `artist_id`
+- Bei gleichem artist_hk wird der API-BK bevorzugt (`COALESCE(api_bk, fallback_bk)`)
+- Chart-Daten (aus Kaggle) werden mit degenerierten Dimensionen (track_name, artist_name als Text) statt FK-Joins geführt, da kein zuverlässiges Matching möglich ist
+
+**Merke**: Bei Datenquellen ohne gemeinsamen Business Key lieber degenerierte Dimensionen verwenden als unzuverlässige Fuzzy-Matches.
+
+### Spotify-Pipeline: SCD2 über Satellite-Hashdiff (24.03.2026)
+
+**Konzept**: SCD Type 2 wird NICHT im Satellite selbst implementiert, sondern im Business-Vault-Modell `dim_artist`:
+1. `s_artist_profile` speichert append-only Snapshots mit `artist_profile_hashdiff`
+2. Gleicher Hashdiff = keine Änderung → Row wird beim inkrementellen Load übersprungen
+3. Neuer Hashdiff = Änderung an popularity/followers/genres → neue Satellite-Row
+4. `dim_artist` berechnet per `LEAD(load_date) OVER(...)` die `valid_to`-Timestamps
+5. `is_current = (valid_to IS NULL)` markiert die aktuelle Version
+
+**Merke**: Data Vault trennt sauber zwischen Historisierung (Satellite, append-only) und SCD2-Logik (Business Vault, Full Refresh). Der Satellite ist nur die "Datenbasis", die Dimension berechnet Gültigkeitszeiträume.
+
 ### dbt SELECT DISTINCT vs. GROUP BY bei mehrfach geladenen Rohdaten
 
 **Problem**: Data-Vault-Hubs und -Satellites hatten Duplikate trotz `SELECT DISTINCT`, weil `_loaded_at` pro Ladevorgang unterschiedlich war.
@@ -17,6 +40,23 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 **Betroffene Dateien**: `dbt/models/data_vault/hubs/h_location.sql`, `dbt/models/data_vault/satellites/s_location_details.sql`
 
 **Merke**: Bei Data-Vault-Loads mit mehrfachen Ladevorgängen immer `GROUP BY` statt `SELECT DISTINCT` verwenden, wenn technische Felder wie `_loaded_at` enthalten sind.
+
+### OIDC/OAuth2 Remote-Zugriff – Split-DNS-Problem
+
+**Problem**: Bei Zugriff auf den Stack von einem anderen Rechner (z.B. VM im LAN) scheitert OIDC/SSO, weil:
+1. Browser-Redirects (MinIO, Airflow, Trino) auf `localhost` zeigen → Client-Browser landet auf eigenem Rechner
+2. Keycloak-Issuer-URL nutzt `keycloak` als Hostname → Browser kann das nicht auflösen
+
+**Ursache**: Docker-interne Hostnamen (`keycloak`, `minio`) sind außerhalb des Docker-Netzwerks nicht auflösbar. Keycloak setzt `KC_HOSTNAME=keycloak` als festen Issuer-Hostnamen.
+
+**Lösung (EXTERNAL_HOST)**:
+- Variable `EXTERNAL_HOST` in `.env` (Default: `localhost`)
+- `start.sh` erkennt Netzwerk-IP automatisch und aktualisiert Keycloak Redirect URIs via Admin API
+- `/etc/hosts`-Eintrag `<VM-IP> keycloak` auf jedem Client-Rechner weiterhin nötig (Split-DNS)
+
+**Warum kein `KC_HOSTNAME=${EXTERNAL_HOST}`?**: Trino validiert OIDC-Token gegen `http://keycloak:8082/...` (Docker-intern). Wenn Keycloak den Issuer auf `http://<IP>:8082/...` setzt, stimmt der Issuer nicht mit Trinos Config überein → Token-Validierung scheitert. Das ist das klassische Split-DNS-Problem bei OIDC in Docker-Umgebungen.
+
+**Langfristige Lösung**: Traefik Reverse Proxy + dnsmasq + eigene CA → ein DNS-Name (`keycloak.lakehouse.internal`) der sowohl von Docker als auch vom Browser aufgelöst wird.
 
 ### dbt generate_schema_name Macro
 
@@ -49,6 +89,37 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 **Status**: ✅ Implementiert (Basis)
 
 ---
+
+### ADR-008: Aggregation von Energie-Preis-Daten auf Monatsebene
+
+**Entscheidung**: Erstellung eines neuen Modells `fact_energy_price_monthly` zur Aggregation stündlicher Energiepreisdaten auf Monatsebene
+
+**Gründe**:
+- ✅ Erweiterung der vorhandenen Energie-Preis-Modelle (`fact_energy_price_daily`)
+- ✅ Aggregation der stündlichen Daten zu monatlichen Aggregaten (Min, Max, Durchschnitt, Standardabweichung)
+- ✅ Konsistente Struktur mit bestehenden Modellen
+- ✅ Wiederverwendung bestehender Datenquellen und Transformationslogik
+- ✅ Unterstützung für monatliche Analysen und Reporting
+
+**Implementierungsdetails**:
+- Modell basiert auf `fact_energy_price_daily` 
+- Aggregation auf Monatsebene (per `date_key` und `price_zone_hk`)
+- Enthält die gleichen Metriken wie `fact_energy_price_daily` (min_price, max_price, avg_price, stddev_price)
+- Wird in `business_vault` abgelegt
+- Verwendung der bestehenden `dim_date` Dimension für Datumsinformationen
+
+**Status**: ✅ Implementiert (24.03.2026)
+
+### Änderung: `fact_energy_price_monthly` Modell-Struktur
+
+**Implementierungsdetails**:
+- Modell basiert auf `fact_energy_price_hourly` 
+- Aggregation auf Monatsebene (per `date_key` und `price_zone_hk`)
+- Enthält die gleichen Metriken wie `fact_energy_price_daily` (min_price, max_price, avg_price, stddev_price)
+- Wird in `business_vault` abgelegt
+- Verwendung der bestehenden `dim_date` Dimension für Datumsinformationen
+- Inkrementelle Lade-Logik implementiert mit `is_incremental()`-Condition
+- Verwendung von `stddev_pop()` für Population-Standardabweichung statt `stddev_samp()`
 
 ### ADR-002: Docker Compose für Orchestration
 
@@ -135,6 +206,29 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 **Produktions-Upgrade**: Kann zu echter AWS S3 gewechselt werden
 
 **Status**: ✅ Implementiert
+
+---
+
+### ADR-007: Hash-basierte Surrogate Keys für Dimensionen
+
+**Entscheidung**: Jede Dimension im Business Vault erhält einen Hash-basierten Surrogate Key: `SK = md5(hub_hash_key || '|' || valid_from)`
+
+**Gründe**:
+- ✅ Deterministisch, idempotent (Re-runs erzeugen identische Keys)
+- ✅ Keine Sequenzen nötig (Trino/Iceberg hat keine SERIAL/IDENTITY)
+- ✅ SCD2-fähig: neues valid_from → neuer SK pro Dimensionsversion
+- ✅ Architektonisch korrekt nach Kimball (Surrogate Key in Fakt zeigt auf eindeutige Dimensionsversion)
+- ✅ Pipe-Separator verhindert Hash-Kollisionen
+
+**Hub Hash Key bleibt erhalten**: In Dimensionen und Fakten als Referenz zum Data Vault Hub (Debugging, Lineage).
+
+**Konvention für alle zukünftigen Dimensionen**: Immer `<entity>_sk = generate_dimension_sk(['<entity>_hk', 'valid_from'])` als PK. FK in Fakten = SK. HK bleibt als Referenz. Macro: `dbt/macros/generate_dimension_sk.sql`.
+
+**dim_date / dim_time**: Nicht betroffen (haben bereits eigene Integer-PKs).
+
+**Trino-Besonderheit**: `md5()` erwartet `varbinary`, nicht `varchar`. Korrektes Muster im Macro: `lower(to_hex(md5(to_utf8(expr))))` – `to_utf8()` für Input, `to_hex()` für Output.
+
+**Status**: ✅ Implementiert (24.03.2026) – dbt run + dbt test: PASS=15/15 Modelle, PASS=130/130 Tests
 
 ---
 

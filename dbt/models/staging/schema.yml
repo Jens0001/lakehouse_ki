@@ -58,7 +58,47 @@ models:
         description: "Zeitstempel des Ladevorgangs in die Rohtabelle (UTC)"
       - name: record_source
         description: "Datenquelle, fest 'open-meteo'"
+
+  - name: stg_energy_price
+    description: >
+      Ephemeres Staging-Modell für Energy-Charts Day-Ahead-Spotpreise.
+      Berechnet Hash-Keys (Data Vault), bereinigt Typen und filtert ungültige Zeilen.
+      Wird nicht materialisiert, sondern direkt als CTE in downstream-Modelle eingefügt.
+    columns:
+      - name: price_zone_hk
+        description: "MD5-Hashkey auf bidding_zone – primärer Hub-Key für die Gebotszone"
+        tests:
+          - not_null
+      - name: price_hashdiff
+        description: "MD5-Hashdiff auf (bidding_zone, timestamp) – eindeutiger Bezeichner je Stunde und Zone"
+        tests:
+          - not_null
+          - unique
+      - name: measured_at
+        description: "Messzeitpunkt (UTC-basiert aus unix_seconds)"
+        tests:
+          - not_null
+      - name: date_key
+        description: "Datum der Messung (Partitionierungsspalte aus der Rohtabelle)"
+        tests:
+          - not_null
+      - name: hour
+        description: "Stunde des Tages (0–23)"
+        tests:
+          - not_null
+      - name: bidding_zone
+        description: "Gebotszone (z.B. 'DE-LU')"
+        tests:
+          - not_null
+      - name: price_eur_mwh
+        description: "Day-Ahead-Spotpreis in EUR/MWh (kann NULL oder negativ sein)"
+      - name: _source_file
+        description: "Pfad zur JSON-Quelldatei in der MinIO Landing Zone"
+      - name: _loaded_at
+        description: "Zeitstempel des Ladevorgangs in die Rohtabelle (UTC)"
+      - name: record_source
+        description: "Datenquelle, fest 'energy-charts'"
         tests:
           - not_null
           - accepted_values:
-              values: ['open-meteo']
+              values: ['energy-charts']

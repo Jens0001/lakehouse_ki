@@ -6,12 +6,18 @@ models:
       Standort-Dimension mit aktuellen Attributen.
       Kein SCD2: es wird immer nur der neueste Stand aus s_location_details ausgeliefert.
       Materialisierung: table.
+      location_sk ist der Primärschlüssel (Surrogate Key, Hash aus HK + valid_from).
+      location_hk bleibt als Referenz zum Data Vault Hub erhalten.
     columns:
-      - name: location_hk
-        description: "Surrogatschlüssel (MD5) – FK zu h_location, PK dieser Dimension"
+      - name: location_sk
+        description: "Surrogate Key = md5(location_hk || '|' || valid_from) – PK dieser Dimension, SCD2-fähig"
         tests:
           - not_null
           - unique
+      - name: location_hk
+        description: "Hub Hash Key (MD5) – Referenz zu h_location (Data Vault)"
+        tests:
+          - not_null
       - name: location_key
         description: "Lesbarer Business Key (z.B. 'berlin-reinickendorf')"
         tests:
@@ -96,27 +102,31 @@ models:
 
   - name: dim_time
     description: >
-      Stunden-Dimension mit 24 statischen Zeilen (eine pro Stunde des Tages).
+      Viertelstunden-Dimension mit 96 statischen Zeilen (eine pro 15-min-Intervall).
+      Granularität entspricht dem EPEX SPOT Day-Ahead 15-min-Produkt (DE-LU).
       Enthält Tagesabschnitt (Nacht/Morgen/Tag/Abend) und is_peak für
-      spätere Stromtarif-Auswertungen.
-      Materialisierung: table.
+      spätere Stromtarif-Auswertungen. Historische stündliche Daten nutzen
+      nur time_id 0, 4, 8, … 92 (volle Stunden). Materialisierung: table.
     columns:
       - name: time_id
-        description: "Surrogatschlüssel = Stundenzahl (0–23), identisch mit 'hour'"
+        description: "Surrogatschlüssel = Slot-Index 0–95 (hour * 4 + quarter_of_hour)"
         tests:
           - not_null
           - unique
       - name: hour
-        description: "Stunde des Tages (0–23)"
+        description: "Volle Stunde des Slots (0–23); 4 Zeilen pro Stunde bei 15-min-Granularität"
         tests:
           - not_null
-          - unique
+      - name: minute_of_hour
+        description: "Minute innerhalb der Stunde: 0, 15, 30 oder 45"
+        tests:
+          - not_null
       - name: label
-        description: "Lesbare Stundenbezeichnung (z.B. '08:00')"
+        description: "Lesbare Zeitbezeichnung (z.B. '08:15')"
         tests:
           - not_null
       - name: period
-        description: "Tagesabschnitt: Nacht (0–5, 22–23), Morgen (6–9), Tag (10–16), Abend (17–21)"
+        description: "Tagesabschnitt: Nacht (0–5, 22–23 Uhr), Morgen (6–9), Tag (10–16), Abend (17–21)"
         tests:
           - not_null
           - accepted_values:
@@ -127,17 +137,21 @@ models:
   - name: fact_weather_hourly
     description: >
       Stündliche Wettermessungen pro Standort.
-      Inkrementell befüllt aus s_weather_hourly, verknüpft mit h_location (dim_location),
+      Inkrementell befüllt aus s_weather_hourly, verknüpft mit dim_location (via location_sk),
       dim_date und dim_time.
       Granularität: 1 Row pro Standort und Stunde.
     columns:
-      - name: location_hk
-        description: "FK zu dim_location (und h_location)"
+      - name: location_sk
+        description: "FK zu dim_location (Surrogate Key)"
         tests:
           - not_null
           - relationships:
               to: ref('dim_location')
-              field: location_hk
+              field: location_sk
+      - name: location_hk
+        description: "Referenz zu h_location (Hub Hash Key, für Debugging/Lineage)"
+        tests:
+          - not_null
       - name: date_id
         description: "FK zu dim_date (YYYYMMDD als integer)"
         tests:
@@ -146,7 +160,7 @@ models:
               to: ref('dim_date')
               field: date_id
       - name: time_id
-        description: "FK zu dim_time (= Stunde 0–23)"
+        description: "FK zu dim_time (= Stunde 0–23, nur volle Stunden bei Wetterdaten)"
         tests:
           - not_null
           - relationships:
@@ -185,13 +199,17 @@ models:
       Granularität: 1 Row pro Standort und Tag.
       Inkrementell befüllt: neuer Tag wird ergänzt sobald er in der stündlichen Fact vorliegt.
     columns:
-      - name: location_hk
-        description: "FK zu dim_location"
+      - name: location_sk
+        description: "FK zu dim_location (Surrogate Key)"
         tests:
           - not_null
           - relationships:
               to: ref('dim_location')
-              field: location_hk
+              field: location_sk
+      - name: location_hk
+        description: "Referenz zu h_location (Hub Hash Key, für Debugging/Lineage)"
+        tests:
+          - not_null
       - name: date_id
         description: "FK zu dim_date (YYYYMMDD integer)"
         tests:
@@ -223,6 +241,168 @@ models:
         description: "Maximale Windgeschwindigkeit des Tages in km/h"
       - name: humidity_avg
         description: "Mittlere relative Luftfeuchtigkeit des Tages in %"
+      - name: load_date
+        description: "Letzter Ladezeitpunkt (max aus den Stundenwerten)"
+        tests:
+          - not_null
+
+  - name: dim_price_zone
+    description: >
+      Gebotszone-Dimension. Enthält alle bekannten Gebotszonen (z.B. DE-LU).
+      Kein SCD2: eine Gebotszone ändert sich nie.
+      Materialisierung: table (Dremio OSS kann Iceberg Views nicht lesen).
+      price_zone_sk ist der Primärschlüssel (Surrogate Key, Hash aus HK + valid_from).
+      price_zone_hk bleibt als Referenz zum Data Vault Hub erhalten.
+    columns:
+      - name: price_zone_sk
+        description: "Surrogate Key = md5(price_zone_hk || '|' || valid_from) – PK dieser Dimension, SCD2-fähig"
+        tests:
+          - not_null
+          - unique
+      - name: price_zone_hk
+        description: "Hub Hash Key (MD5) – Referenz zu h_price_zone (Data Vault)"
+        tests:
+          - not_null
+      - name: bidding_zone
+        description: "Business Key: Gebotszone (z.B. 'DE-LU')"
+        tests:
+          - not_null
+          - unique
+      - name: valid_from
+        description: "Zeitpunkt der Ersterfassung dieser Zone (load_date aus h_price_zone)"
+        tests:
+          - not_null
+
+  - name: fact_energy_price_hourly
+    description: >
+      Stündliche Day-Ahead-Spotpreise pro Gebotszone.
+      Granularität: 1 Row pro Zone und Stunde.
+      Inkrementell befüllt aus s_energy_price_hourly, verknüpft mit dim_price_zone (via price_zone_sk),
+      dim_date und dim_time.
+    columns:
+      - name: price_zone_sk
+        description: "FK zu dim_price_zone (Surrogate Key)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_price_zone')
+              field: price_zone_sk
+      - name: price_zone_hk
+        description: "Referenz zu h_price_zone (Hub Hash Key, für Debugging/Lineage)"
+        tests:
+          - not_null
+      - name: date_id
+        description: "FK zu dim_date (YYYYMMDD als integer)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: time_id
+        description: "FK zu dim_time (= Slot 0–95; historische Stünden nutzen 0,4,8,…,92)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_time')
+              field: time_id
+      - name: measured_at
+        description: "Degenerate Dimension: exakter Messzeitpunkt (UTC)"
+        tests:
+          - not_null
+      - name: date_key
+        description: "Degenerate Dimension: Datum der Stunde"
+        tests:
+          - not_null
+      - name: price_eur_mwh
+        description: "Day-Ahead-Spotpreis in EUR/MWh (kann NULL oder negativ sein)"
+      - name: load_date
+        description: "Ladezeitpunkt (aus dem Satelliten)"
+        tests:
+          - not_null
+      - name: _source_file
+        description: "Quelldatei in der Landing Zone"
+
+  - name: fact_energy_price_daily
+    description: >
+      Tägliche Preiskennzahlen, aggregiert aus fact_energy_price_hourly.
+      Granularität: 1 Row pro Gebotszone und Tag.
+      Enthält Min, Max, Durchschnitt und Standardabweichung sowie Anzahl negativer Stunden.
+    columns:
+      - name: price_zone_sk
+        description: "FK zu dim_price_zone (Surrogate Key)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_price_zone')
+              field: price_zone_sk
+      - name: price_zone_hk
+        description: "Referenz zu h_price_zone (Hub Hash Key, für Debugging/Lineage)"
+        tests:
+          - not_null
+      - name: date_id
+        description: "FK zu dim_date (YYYYMMDD integer)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: date_key
+        description: "Datum der Aggregation"
+        tests:
+          - not_null
+      - name: price_min
+        description: "Günstigste Stunde des Tages in EUR/MWh"
+      - name: price_max
+        description: "Teuerste Stunde des Tages in EUR/MWh"
+      - name: price_avg
+        description: "Tagesdurchschnitt in EUR/MWh"
+      - name: price_stddev
+        description: "Standardabweichung der Stundenpreise – Maß für Preisvolatilität"
+      - name: negative_price_hours
+        description: "Anzahl Stunden mit negativem Preis (Überproduktion aus Erneuerbaren)"
+      - name: load_date
+        description: "Letzter Ladezeitpunkt (max aus den Stundenwerten)"
+        tests:
+          - not_null
+
+  - name: fact_energy_price_monthly
+    description: >
+      Monatliche Preiskennzahlen, aggregiert aus fact_energy_price_hourly.
+      Granularität: 1 Row pro Gebotszone und Monat.
+      Enthält Min, Max, Durchschnitt und Standardabweichung sowie Anzahl negativer Stunden.
+    columns:
+      - name: price_zone_sk
+        description: "FK zu dim_price_zone (Surrogate Key)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_price_zone')
+              field: price_zone_sk
+      - name: price_zone_hk
+        description: "Referenz zu h_price_zone (Hub Hash Key, für Debugging/Lineage)"
+        tests:
+          - not_null
+      - name: date_id
+        description: "FK zu dim_date (YYYYMMDD integer)"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+      - name: date_key
+        description: "Datum der Aggregation"
+        tests:
+          - not_null
+      - name: price_min
+        description: "Günstigste Stunde des Monats in EUR/MWh"
+      - name: price_max
+        description: "Teuerste Stunde des Monats in EUR/MWh"
+      - name: price_avg
+        description: "Monatsdurchschnitt in EUR/MWh"
+      - name: price_stddev
+        description: "Standardabweichung der Stundenpreise – Maß für Preisvolatilität"
+      - name: negative_price_hours
+        description: "Anzahl Stunden mit negativem Preis (Überproduktion aus Erneuerbaren)"
       - name: load_date
         description: "Letzter Ladezeitpunkt (max aus den Stundenwerten)"
         tests:

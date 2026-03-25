@@ -36,3 +36,116 @@ sources:
             description: "Pfad zur Quelldatei in der Landing Zone"
           - name: _loaded_at
             description: "Ladezeitpunkt (UTC)"
+      - name: energy_price_hourly
+        description: "Stündliche Day-Ahead-Spotpreise von Energy-Charts (DE-LU), 1:1 aus Landing Zone geladen. Verfügbar ab 01.10.2018 (Gebotszonentrennung DE-AT-LU)."
+        columns:
+          - name: timestamp
+            description: "Zeitstempel der Stunde (UTC-basiert aus unix_seconds)"
+          - name: date_key
+            description: "Datum (Partitionierungsspalte)"
+          - name: hour
+            description: "Stunde des Tages (0–23, UTC)"
+          - name: bidding_zone
+            description: "Gebotszone (z.B. DE-LU)"
+          - name: price_eur_mwh
+            description: "Day-Ahead-Spotpreis in EUR/MWh (kann NULL oder negativ sein)"
+          - name: _source_file
+            description: "Pfad zur Quelldatei in der Landing Zone"
+          - name: _loaded_at
+            description: "Ladezeitpunkt (UTC)"
+
+      # --- Spotify-Datenquellen (Kaggle + API) ---
+
+      - name: spotify_tracks
+        description: "Spotify-Tracks aus Kaggle-Dataset: Audio Features, Popularity, Genre. Befüllt durch DAG spotify_initial_load (einmaliger Bulk-Load)."
+        columns:
+          - name: track_id
+            description: "Eindeutige Spotify Track ID"
+          - name: track_name
+            description: "Name des Tracks"
+          - name: artist_name
+            description: "Künstlername(n), ggf. komma-/semikolon-separiert bei Kollaborationen"
+          - name: album_name
+            description: "Name des Albums"
+          - name: popularity
+            description: "Spotify Popularity Score (0–100)"
+          - name: duration_ms
+            description: "Dauer des Tracks in Millisekunden"
+          - name: explicit
+            description: "Expliziter Inhalt (true/false)"
+          - name: danceability
+            description: "Tanzbarkeit (0.0–1.0)"
+          - name: energy
+            description: "Energie-Level (0.0–1.0)"
+          - name: musical_key
+            description: "Tonart als Integer (0=C, 1=C#, ..., 11=B; -1=unbekannt)"
+          - name: loudness
+            description: "Lautheit in dB (typisch -60 bis 0)"
+          - name: musical_mode
+            description: "Tongeschlecht (0=Moll, 1=Dur)"
+          - name: speechiness
+            description: "Sprachanteil (0.0–1.0)"
+          - name: acousticness
+            description: "Akustik-Anteil (0.0–1.0)"
+          - name: instrumentalness
+            description: "Instrumentalanteil (0.0–1.0)"
+          - name: liveness
+            description: "Live-Charakter (0.0–1.0)"
+          - name: valence
+            description: "Positivität/Stimmung (0.0–1.0)"
+          - name: tempo
+            description: "Geschwindigkeit in BPM"
+          - name: time_signature
+            description: "Taktart (3–7, typisch 4)"
+          - name: track_genre
+            description: "Genre des Tracks"
+          - name: _source_file
+            description: "Pfad zur Quelldatei in der Landing Zone"
+          - name: _loaded_at
+            description: "Ladezeitpunkt (UTC)"
+
+      - name: spotify_charts
+        description: "Tägliche Spotify-Charts aus Kaggle-Dataset (Top-200 + Viral-50 pro Region). Befüllt durch DAG spotify_initial_load."
+        columns:
+          - name: chart_date
+            description: "Datum des Chart-Eintrags"
+          - name: position
+            description: "Chart-Position (1–200 bei Top-200, 1–50 bei Viral-50)"
+          - name: track_name
+            description: "Name des Tracks"
+          - name: artist_name
+            description: "Künstlername"
+          - name: streams
+            description: "Anzahl Streams (kann NULL sein, z.B. bei Viral-50)"
+          - name: region
+            description: "Länder-/Regionscode (z.B. 'de', 'us', 'global')"
+          - name: chart_type
+            description: "Chart-Typ: 'top200' oder 'viral50'"
+          - name: trend
+            description: "Trend-Indikator (z.B. 'MOVE_UP', 'SAME_POSITION')"
+          - name: url
+            description: "Spotify-URL des Tracks"
+          - name: _source_file
+            description: "Pfad zur Quelldatei in der Landing Zone"
+          - name: _loaded_at
+            description: "Ladezeitpunkt (UTC)"
+
+      - name: spotify_artist_snapshots
+        description: "Wöchentliche Snapshots der Artist-Metadaten von der Spotify Web API. Befüllt durch DAG spotify_artist_update. Basis für SCD2 in dim_artist."
+        columns:
+          - name: artist_id
+            description: "Eindeutige Spotify Artist ID"
+          - name: artist_name
+            description: "Aktueller Künstlername zum Snapshot-Zeitpunkt"
+          - name: genres
+            description: "Genres als komma-separierter String (z.B. 'pop, dance pop')"
+          - name: popularity
+            description: "Spotify Popularity Score (0–100), ändert sich regelmäßig"
+          - name: followers
+            description: "Anzahl Follower auf Spotify, ändert sich regelmäßig"
+          - name: snapshot_date
+            description: "Datum des Snapshots (Partitionierungsspalte)"
+          - name: _source_file
+            description: "Pfad zur Quelldatei in der Landing Zone"
+          - name: _loaded_at
+            description: "Ladezeitpunkt (UTC)"

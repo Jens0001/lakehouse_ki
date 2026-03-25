@@ -53,8 +53,39 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
 - 20GB freier Speicherplatz
 - **`/etc/hosts` Eintrag** (einmalig, erforderlich für OIDC/SSO):
   ```
+  # Lokale Entwicklung (gleicher Rechner):
   127.0.0.1 keycloak
+
+  # Zugriff von einem anderen Rechner (VM-IP einsetzen):
+  # 192.168.1.50 keycloak
   ```
+
+  **Eintrag setzen (einmalig):**
+
+  <details>
+  <summary>🐧 Linux / 🍎 macOS</summary>
+
+  ```bash
+  # Lokale Entwicklung:
+  echo '127.0.0.1 keycloak' | sudo tee -a /etc/hosts
+
+  # Remote-Zugriff (VM-IP anpassen):
+  # echo '192.168.1.50 keycloak' | sudo tee -a /etc/hosts
+  ```
+  </details>
+
+  <details>
+  <summary>🪟 Windows (PowerShell als Administrator)</summary>
+
+  ```powershell
+  # Lokale Entwicklung:
+  Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "127.0.0.1 keycloak"
+
+  # Remote-Zugriff (VM-IP anpassen):
+  # Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "192.168.1.50 keycloak"
+  ```
+  </details>
+
   > **Warum?** Keycloak gibt in OIDC-Redirects die URL `http://keycloak:8082/...` zurück. Der Browser muss diesen Hostnamen auflösen können, sonst scheitert der SSO-Login.
 
 ### Installation
@@ -72,9 +103,22 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
    ```
 
 3. **Stack starten**:
+
+   **Option A – Lokale Entwicklung** (Zugriff nur von localhost):
    ```bash
    docker compose up -d --build
    ```
+
+   **Option B – VM / Remote-Zugriff** (von anderen Rechnern im Netzwerk):
+   ```bash
+   ./start.sh              # IP wird automatisch erkannt
+   # oder:
+   ./start.sh 192.168.1.50 # manuelle IP-Angabe
+   ```
+   `start.sh` erkennt die Netzwerk-IP, setzt `EXTERNAL_HOST` in `.env`, startet den Stack und aktualisiert die Keycloak Redirect URIs automatisch.
+
+   > **⚠️ /etc/hosts auf jedem Client-Rechner**: Jeder Rechner, der auf den Stack zugreifen soll, braucht den Eintrag `<VM-IP> keycloak` in seiner `/etc/hosts` Datei.
+
    `--build` ist erforderlich, da Airflow ein Custom Image nutzt (Java JRE 17, JDBC-Treiber für Oracle & DB2, dbt-trino 1.10.1 und zugehörige Provider).
    Beim ersten Start passiert automatisch:
    - Keycloak importiert Realm `lakehouse` (OIDC-Clients + Test-User)
@@ -112,6 +156,8 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
 | **OpenMetadata** | http://localhost:8585 | 8585 | admin@open-metadata.org / admin | Data Governance Katalog (Swagger: /swagger-ui) |
 | **OM Ingestion** | http://localhost:8090 | 8090 | admin / admin | Ingestion Pipeline Runner (Airflow 3.x mini) |
 
+> **Hinweis**: Bei Nutzung von `start.sh` mit einer externen IP ersetzen alle URLs `localhost` durch die gesetzte `EXTERNAL_HOST` Adresse.
+
 ## 🔐 Authentifizierung
 
 Alle Web-Services nutzen **Keycloak OIDC / OAuth2** zur Authentifizierung:
@@ -148,6 +194,7 @@ lakehouse_ki/
 ├── .env                          # Umgebungsvariablen für alle Services
 ├── .instructions.md              # Workspace-Anweisungen
 ├── docker-compose.yml            # Docker Compose Konfiguration
+├── start.sh                      # Start-Script mit IP-Erkennung (VM-Zugriff)
 ├── README.md                      # Diese Datei
 ├── KEYCLOAK_SETUP.md            # Detailliertes Keycloak Setup Guide
 ├── Changelog.md                  # Historie aller Änderungen
@@ -192,7 +239,8 @@ lakehouse_ki/
 ├── init-scripts/
 │   ├── postgres-init.sql        # PostgreSQL Initialisierung
 │   ├── setup-keycloak.sh        # Keycloak automatisches Setup
-│   └── setup_buckets.sh         # MinIO Buckets Setup
+│   ├── setup_buckets.sh         # MinIO Buckets Setup
+│   └── update-keycloak-redirects.sh # Redirect URIs für Remote-Zugriff
 │
 └── volumes/
     └── ...                      # Docker Volumes

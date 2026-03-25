@@ -25,3 +25,28 @@ models:
         description: "Herkunftssystem, fest 'open-meteo'"
         tests:
           - not_null
+
+  - name: h_price_zone
+    description: >
+      Data Vault Hub für Gebotszonen (z.B. DE-LU).
+      Business Key: bidding_zone. Enthält ausschließlich den Business Key und technische Metadaten.
+      Neue Zonen werden inkrementell ergänzt, bestehende nie überschrieben.
+    columns:
+      - name: price_zone_hk
+        description: "MD5-Hashkey auf bidding_zone – Surrogatschlüssel des Hubs"
+        tests:
+          - not_null
+          - unique
+      - name: zone_bk
+        description: "Business Key: Gebotszone (z.B. 'DE-LU')"
+        tests:
+          - not_null
+          - unique
+      - name: load_date
+        description: "Zeitpunkt der erstmaligen Erfassung der Zone (_loaded_at aus der Quelle)"
+        tests:
+          - not_null
+      - name: record_source
+        description: "Herkunftssystem, fest 'energy-charts'"
+        tests:
+          - not_null

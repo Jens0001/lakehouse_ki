@@ -99,7 +99,73 @@ Keine Iceberg Views als dauerhafte Schicht in der Datenarchitektur. Ausnahme: Vi
 
 ---
 
-## 3. Semantische Schicht
+## 3. Surrogate Key Strategie für Dimensionen
+
+### Problem
+
+Im Data Vault 2.0 wird der Hub Hash Key (HK) als MD5 auf den Business Key berechnet. Im bisherigen Star Schema (Business Vault) diente dieser HK direkt als Primärschlüssel der Dimensionen und als Fremdschlüssel in den Fakten.
+
+Das hat zwei Schwächen:
+1. **Kein eigenständiger Dimensionsschlüssel**: Der HK identifiziert die Business-Entität, nicht eine konkrete Version der Dimension. Bei Einführung von SCD2 (Slowly Changing Dimensions) hätten mehrere Versionen denselben HK.
+2. **Architektonisch inkorrekt nach Kimball**: Im Dimensional Modeling nach Kimball muss der Surrogate Key in der Faktentabelle eindeutig auf genau eine Dimensionsversion zeigen.
+
+### Entscheidung
+
+Jede Dimension im Business Vault erhält einen **Hash-basierten Surrogate Key (SK)**:
+
+```
+SK = md5(hub_hash_key || '|' || valid_from)
+```
+
+- **Deterministisch**: Gleiche Eingabe → gleicher Hash. Re-runs erzeugen identische Keys.
+- **Idempotent**: Full Refresh der Dimension produziert dieselben SKs.
+- **Keine Sequenz nötig**: Trino/Iceberg bieten keine `SERIAL`/`IDENTITY`. Der Hash löst das.
+- **SCD2-fähig**: Bei Einführung von SCD2 erzeugt jede neue Version (neues `valid_from`) automatisch einen neuen SK.
+- **Pipe-Separator**: `'|'` zwischen den Hash-Bestandteilen verhindert Kollisionen (z.B. `A|BC` ≠ `AB|C`).
+
+Ein wiederverwendbares dbt-Macro `generate_dimension_sk` kapselt die Generierung.
+
+### Betroffene Dimensionen
+
+| Dimension | Surrogate Key | Als FK in Fakten |
+|---|---|---|
+| `dim_location` | `location_sk` | `fact_weather_hourly`, `fact_weather_daily`, `weather_trends` |
+| `dim_price_zone` | `price_zone_sk` | `fact_energy_price_hourly`, `fact_energy_price_daily`, `energy_price_trends` |
+| `dim_date` | `date_id` (unverändert) | Alle Fakten |
+| `dim_time` | `time_id` (unverändert) | Alle Fakten |
+
+`dim_date` und `dim_time` haben bereits eigenständige Integer-PKs und sind nicht betroffen.
+
+### Hub Hash Key bleibt erhalten
+
+Der HK (`location_hk`, `price_zone_hk`) bleibt in Dimensionen und Fakten als Referenzspalte erhalten:
+- Debugging: Rückverfolgung zum Data Vault Hub
+- Lineage: OpenMetadata kann die Kette Hub → Dimension → Fakt nachvollziehen
+- `unique_key` in inkrementellen Fakten bleibt auf HK-Basis (stabil, da HK sich nie ändert)
+
+### Konsequenz für Fakt-Loads
+
+Der Surrogate Key wird **zur Load-Time** in die Faktentabelle geschrieben (Join auf Dimension), nicht erst bei Query-Time. Consumer machen nur einen einfachen Equality-Join:
+
+```sql
+-- Consumer-Query: performant, kein Range-Join
+SELECT ...
+FROM fact_weather_hourly f
+JOIN dim_location d ON f.location_sk = d.location_sk
+```
+
+### Zukunft: SCD2
+
+Bei Einführung von SCD2 wird:
+- `dim_location` um `valid_to` erweitert
+- Der Fakt-Load macht einen Range-Join (`valid_from ≤ measured_at < valid_to`) zur Load-Time
+- Der SK ändert sich pro Version → Consumer-Joins bleiben identisch
+
+> **Konvention**: Jede neue Dimension erhält immer `<entity>_sk = md5(hk || '|' || valid_from)` als Primärschlüssel. Dokumentiert als wiederverwendbares Macro `generate_dimension_sk`.
+
+---
+
+## 4. Semantische Schicht
 
 ### Problem
 
@@ -251,7 +317,7 @@ Cognos Data Module ◀── Bridge-Skript (täglich, Airflow DAG)
 
 ---
 
-## 4. Measures und Kennzahlen
+## 5. Measures und Kennzahlen
 
 ### Entscheidungsrahmen
 
@@ -271,7 +337,7 @@ Measures in VDS sind für Cognos nicht sichtbar anders als in Dremio selbst. Cog
 
 ---
 
-## 5. Multi-User-Security und Zugriffsrechte
+## 6. Multi-User-Security und Zugriffsrechte
 
 ### Dremio OSS – freie Rollen
 
@@ -289,7 +355,7 @@ Dremio OSS unterstützt LDAP/AD für die **Authentifizierung** (Login), aber nic
 
 ---
 
-## 6. Cognos Analytics Anbindung
+## 7. Cognos Analytics Anbindung
 
 > **Scope-Hinweis**: Cognos Analytics läuft **nicht** in diesem Docker Compose Stack und ist nicht containerisiert. Es wird auf der finalen Zielplattform zur Verfügung stehen und sich von dort per JDBC oder Arrow Flight SQL an Dremio (ggf. Trino) anbinden. Die folgenden Architekturentscheidungen beschreiben diese externe Anbindung.
 
@@ -318,7 +384,7 @@ Cognos verbindet sich über einen **Service Account** (`cognos-svc`) – nicht p
 
 ---
 
-## 7. Offene Fragen
+## 8. Offene Fragen
 
 ### 7.1 Dremio – langfristige Relevanz neben DataHub
 
@@ -353,7 +419,7 @@ Verzicht auf Iceberg Views funktioniert gut bei überschaubarer Modell-Anzahl. B
 
 ---
 
-## 8. Data Lakehouse Schichtenarchitektur
+## 9. Data Lakehouse Schichtenarchitektur
 
 Der Stack implementiert eine klar geschichtete Datenarchitektur nach dem Medallion-Pattern, erweitert um Data Vault 2.0 für robuste Historisierung.
 
@@ -489,12 +555,49 @@ SELECT ... FROM stg_orders
 Data Vault 2.0 bietet auditierbare, historisierte Datenspeicherung durch klare Trennung von Identität (Hub), Beziehung (Link) und beschreibenden Attributen (Satellite).
 
 ```
-Hub  → eindeutige Geschäftsobjekte (z.B. h_location, h_customer)
-Link → Beziehungen zwischen Hubs  (z.B. l_order_customer)
+Hub  → eindeutige Geschäftsobjekte (z.B. h_location, h_track, h_artist)
+Link → Beziehungen zwischen Hubs  (z.B. l_track_artist)
 Sat  → beschreibende Attribute, historisiert mit load_date + hashdiff
 ```
 
 Macros: `automate_dv.hub`, `automate_dv.link`, `automate_dv.sat`
+
+#### Data Vault Objekte nach Domäne
+
+**Wetter (Open-Meteo):** h_location, s_location_details, s_weather_hourly
+**Energiepreise (Energy-Charts):** h_price_zone, s_energy_price_hourly
+**Spotify:** h_track, h_artist, h_country, l_track_artist, s_track_details, s_track_audio_features, s_artist_profile, s_chart_entry
+
+#### Datenfluss Spotify-Domäne
+
+```
+Kaggle CSV (Tracks + Charts)
+    ↓ [DAG: spotify_initial_load]
+MinIO: s3://lakehouse/landing/csv/spotify/
+    ↓ [Trino INSERT]
+iceberg.raw.spotify_tracks, iceberg.raw.spotify_charts
+    ↓ [dbt staging ephemeral]
+stg_spotify_track, stg_spotify_chart
+
+Spotify Web API (wöchentlich)
+    ↓ [DAG: spotify_artist_update]
+MinIO: s3://lakehouse/landing/json/spotify_artists/YYYY-MM-DD.json
+    ↓ [Trino INSERT]
+iceberg.raw.spotify_artist_snapshots
+    ↓ [dbt staging ephemeral]
+stg_spotify_artist_snapshot
+
+Staging → Data Vault:
+    h_track, h_artist, h_country, l_track_artist
+    s_track_details, s_track_audio_features, s_artist_profile, s_chart_entry
+
+Data Vault → Business Vault:
+    dim_artist (SCD2!), dim_track, dim_country
+    fact_chart_entry
+
+Business Vault → Marts:
+    artist_chart_performance (weekly/monthly)
+```
 
 ---
 
@@ -503,10 +606,36 @@ Macros: `automate_dv.hub`, `automate_dv.link`, `automate_dv.sat`
 | Eigenschaft | Wert |
 |-------------|------|
 | **Iceberg-Schema** | `iceberg.business_vault` |
-| **Materialisierung** | dbt `table` |
+| **Materialisierung** | dbt `table` (Dimensionen), dbt `incremental` (Fakten) |
 | **Objekte** | Dimensionstabellen (`dim_*`), Faktentabellen (`fact_*`) |
 
 Aus den Data Vault Objekten werden klassische Dimensional Models (Star-Schema) abgeleitet. Diese Schicht ist optimiert für Performance und Lesbarkeit.
+
+#### Modellierungsgrundsätze Business Vault
+
+**Dimensionen:**
+- Jede Dimension hat einen eigenen Surrogate Key (`<entity>_sk`), erzeugt über `generate_dimension_sk` (→ Abschnitt 3)
+- Der Hub Hash Key (`<entity>_hk`) bleibt als Referenzspalte erhalten (Lineage, Debugging)
+- Dimensionsattribute beschreiben die Geschäftsentität vollständig (alle relevanten Felder aus Satelliten)
+- Bei Einführung von SCD2 ändert sich nur die Dimension – Fakten referenzieren weiterhin den SK
+
+**Fakten:**
+- Fremdschlüssel auf Dimensionen = Surrogate Key (SK), nicht Hub Hash Key
+- `date_id` und `time_id` bleiben Integer-FKs (dim_date und dim_time haben eigene Integer-PKs)
+- SK-Auflösung geschieht **zur Load-Time** (Join auf Dimension beim Schreiben der Fakt), nicht zur Query-Time
+- Hub Hash Key bleibt als zusätzliche Referenzspalte in der Fakt erhalten
+- Degenerate Dimensions (z.B. `measured_at`, `date_key`) werden direkt in die Fakt geschrieben
+
+**SCD Type 2 (Slowly Changing Dimensions):**
+- Aktuell implementiert für: `dim_artist` (Spotify-Künstler)
+- SCD2-Felder: `valid_from`, `valid_to`, `is_current`, `version_number`
+- Logik: `LEAD(load_date) OVER (PARTITION BY hk ORDER BY load_date)` berechnet `valid_to`
+- `is_current = (valid_to IS NULL)` → aktuelle Version
+- Satellite `s_artist_profile` liefert die History (append-only, Hashdiff-basiert)
+- Die Dimension berechnet alle Versionen per Full Refresh (TABLE-Materialisierung)
+- Fakten-Joins auf SCD2-Dimensionen: `WHERE is_current = TRUE` oder zeitpunktbasiert (`valid_from <= event_date AND (valid_to IS NULL OR valid_to > event_date)`)
+
+**Zielpublikum:** dbt-Downstream-Modelle, technische Analysten, OLAP-Tools (Cognos) die selbst joinen.
 
 Besonderheit `dim_date`:
 - Enthält relative Zeitfelder (`is_yesterday`, `days_ago`, `is_current_month` etc.)
@@ -523,7 +652,31 @@ Besonderheit `dim_date`:
 | **Materialisierung** | dbt `table` |
 | **Zweck** | Anwendungs- oder Abteilungs-spezifische Aggregationen |
 
-Marts sind schmale, performante Tabellen für konkrete Anwendungsfälle (BI-Tools, APIs, Reports). Komplexe Kennzahlen-Logik wird hier implementiert statt in Cognos Data Modules (→ Kapitel 4).
+Marts sind schmale, performante Tabellen für konkrete Anwendungsfälle (BI-Tools, APIs, Reports). Komplexe Kennzahlen-Logik wird hier implementiert statt in Cognos Data Modules (→ Kapitel 5).
+
+#### Modellierungsgrundsätze Marts
+
+**Selektive Denormalisierung:**
+- Marts sind **vollständig denormalisiert** – alle für den Use Case relevanten Dimensionsattribute werden per Join aufgelöst und direkt als Spalten in den Mart geschrieben
+- Der Consumer (Grafana, Dremio, Cognos) braucht keine Joins mehr – jede Query ist ein einfaches `SELECT ... WHERE ...`
+- Technische Schlüssel (SK, HK) werden **nicht** in den Mart übernommen; stattdessen enthält der Mart lesbare Business-Attribute (z.B. `location_key`, `bidding_zone`, `year`, `month`)
+
+**Auswahl der Attribute:**
+- Nicht alle Dimensionsattribute werden blind übernommen – nur die für den **konkreten Anwendungsfall** relevanten
+- Faustregel: Wenn ein Attribut zum Filtern, Gruppieren oder Anzeigen gebraucht wird, gehört es in den Mart. Wenn nicht, bleibt es in `business_vault.dim_*`
+- Bei Dimensionen mit vielen Attributen (z.B. 30+) landen typischerweise 5–15 im Mart – der Rest ist über das Star Schema in `business_vault` erreichbar
+
+**Abgrenzung zu Business Vault:**
+
+| Aspekt | Business Vault (Star Schema) | Marts |
+|---|---|---|
+| Joins nötig? | Ja (Fakt ↔ Dimension über SK) | Nein (alles denormalisiert) |
+| Technische Keys sichtbar? | Ja (SK, HK, date_id, time_id) | Nein (nur lesbare Attribute) |
+| Zielpublikum | Tech-User, OLAP-Tools, dbt-Downstream | Endanwender, Dashboards, APIs |
+| Flexibilität | Hoch (beliebige Joins) | Eingeschränkt (vordefinierte Perspektive) |
+| Performance | Join-Overhead bei Abfrage | Maximal (kein Join) |
+
+> **Faustregel**: OLAP-Tools (Cognos, Power BI) die eigene Joins definieren können, arbeiten besser gegen `business_vault` (Star Schema). Dashboards (Grafana) und APIs arbeiten besser gegen `marts` (flat tables).
 
 ---
 
@@ -556,7 +709,7 @@ Automatisierung: DAG `dbt_run_lakehouse_ki` in Airflow führt täglich `dbt deps
 
 ---
 
-## 7. Orchestration – Airflow 3.x Entscheidung
+## 8. Orchestration – Airflow 3.x Entscheidung
 
 ### Warum Airflow 3.1.8 statt 2.8.4?
 

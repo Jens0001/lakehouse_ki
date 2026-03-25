@@ -2,16 +2,18 @@
     config(materialized='table')
 }}
 
--- dim_date: Kalender-Dimension 2020-2030
+-- dim_date: Kalender-Dimension 2018-2030
+-- Beginnt am 2018-01-01 um die Energy-Charts-Preisdaten ab 01.10.2018 abzudecken.
+-- (Vorher begann sie 2020-01-01, was zu relationship-Test-Fehlern führte.)
 -- Als TABLE materialisiert (business_vault-Default), täglicher Full Refresh um 01:00 Uhr.
 -- Relative Felder (is_yesterday etc.) bleiben max. 1h veralten (00:00-01:00 Uhr), was akzeptabel ist.
 -- Grund: Dremio OSS kann Iceberg Views (Trino) nicht lesen – physische Tabelle ist Pflicht.
 
 with dates as (
     select
-        date_add('day', n, date '2020-01-01') as full_date
-    from unnest(sequence(0, 3999)) as t(n)
-    where date_add('day', n, date '2020-01-01') <= date '2030-12-31'
+        date_add('day', n, date '2018-01-01') as full_date
+    from unnest(sequence(0, 4747)) as t(n)
+    where date_add('day', n, date '2018-01-01') <= date '2030-12-31'
 )
 
 select

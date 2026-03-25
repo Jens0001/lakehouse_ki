@@ -9,7 +9,7 @@ services:
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
-      - MINIO_BROWSER_REDIRECT_URL=http://localhost:9001
+      - MINIO_BROWSER_REDIRECT_URL=http://${EXTERNAL_HOST:-localhost}:9001
       - MINIO_IDENTITY_OPENID_ENABLE=on
       - MINIO_IDENTITY_OPENID_CONFIG_URL=http://keycloak:8082/realms/${KEYCLOAK_REALM}/.well-known/openid-configuration
       - MINIO_IDENTITY_OPENID_CLIENT_ID=${KEYCLOAK_CLIENT_ID_MINIO}
@@ -113,6 +113,16 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
       - KEYCLOAK_CLIENT_SECRET_AIRFLOW=${KEYCLOAK_CLIENT_SECRET_AIRFLOW}
+      # ── Airflow Variables (Präfix AIRFLOW_VAR_ wird automatisch erkannt) ──
+      # Alle Werte hier werden bei jedem Container-Start als Airflow Variable
+      # verfügbar – auch nach 'docker compose down -v' (kein manuelles Setzen nötig).
+      - AIRFLOW_VAR_MINIO_ENDPOINT=http://minio:9000
+      - AIRFLOW_VAR_MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
+      - AIRFLOW_VAR_MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
+      - AIRFLOW_VAR_WEATHER_LATITUDE=${WEATHER_LATITUDE}
+      - AIRFLOW_VAR_WEATHER_LONGITUDE=${WEATHER_LONGITUDE}
+      - AIRFLOW_VAR_WEATHER_LOCATION_KEY=${WEATHER_LOCATION_KEY}
+      - AIRFLOW_VAR_ENERGY_CHARTS_BIDDING_ZONE=${ENERGY_CHARTS_BIDDING_ZONE}
     # Airflow 3.x All-in-One Startup:
     # 1. DB migrieren (idempotent)
     # 2. Admin-User anlegen via FAB Security Manager (Airflow 3.x hat kein 'airflow users create')

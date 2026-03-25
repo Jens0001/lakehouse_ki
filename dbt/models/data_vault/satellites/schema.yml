@@ -92,3 +92,47 @@ models:
         description: "Herkunftssystem, fest 'open-meteo'"
         tests:
           - not_null
+
+  - name: s_energy_price_hourly
+    description: >
+      Data Vault Satellit mit stündlichen Day-Ahead-Spotpreisen je Gebotszone.
+      Jede eindeutige Kombination aus Zone und Zeitstempel ergibt eine Row.
+      Historisiert via price_hashdiff – keine Updates, nur Inserts (append-only).
+      Negative Preise und NULL-Werte werden 1:1 übernommen.
+    columns:
+      - name: price_zone_hk
+        description: "MD5-Hashkey auf bidding_zone – Fremdschlüssel zu h_price_zone"
+        tests:
+          - not_null
+          - relationships:
+              to: ref('h_price_zone')
+              field: price_zone_hk
+      - name: price_hashdiff
+        description: "MD5-Hashdiff auf (bidding_zone, timestamp) – Primärschlüssel des Satelliten"
+        tests:
+          - not_null
+          - unique
+      - name: measured_at
+        description: "Messzeitpunkt (UTC-basiert aus unix_seconds)"
+        tests:
+          - not_null
+      - name: date_key
+        description: "Datum der Messung (Partitionierungsspalte)"
+        tests:
+          - not_null
+      - name: hour
+        description: "Stunde der Messung (0–23, UTC)"
+        tests:
+          - not_null
+      - name: price_eur_mwh
+        description: "Day-Ahead-Spotpreis in EUR/MWh (kann NULL oder negativ sein)"
+      - name: _source_file
+        description: "Pfad zur Quelldatei in der Landing Zone"
+      - name: load_date
+        description: "Ladezeitpunkt (_loaded_at aus der Rohtabelle)"
+        tests:
+          - not_null
+      - name: record_source
+        description: "Herkunftssystem, fest 'energy-charts'"
+        tests:
+          - not_null

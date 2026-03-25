@@ -4,10 +4,11 @@
 
 -- weather_trends: Aggregierter Mart für Trend-Analysen
 -- Liefert Wochen- und Monatsmittel pro Standort.
+-- Joins über location_sk (Surrogate Key aus dim_location).
 
 with daily as (
     select
-        f.location_hk,
+        f.location_sk,
         f.date_key,
         f.temperature_min,
         f.temperature_max,
@@ -29,7 +30,7 @@ with daily as (
 
 weekly as (
     select
-        location_hk,
+        location_sk,
         year,
         week,
         min(date_key)           as week_start,
@@ -39,12 +40,12 @@ weekly as (
         round(sum(precipitation_sum), 1) as precipitation_total,
         round(avg(windspeed_avg), 1)   as windspeed_avg
     from daily
-    group by location_hk, year, week
+    group by location_sk, year, week
 ),
 
 monthly as (
     select
-        location_hk,
+        location_sk,
         year,
         month,
         month_name,
@@ -54,7 +55,7 @@ monthly as (
         round(sum(precipitation_sum), 1) as precipitation_total,
         round(avg(windspeed_avg), 1)   as windspeed_avg
     from daily
-    group by location_hk, year, month, month_name
+    group by location_sk, year, month, month_name
 )
 
 -- letzten 90 Tage täglich + Wochenaggregation der letzten 52 Wochen
@@ -71,7 +72,7 @@ select
     d.precipitation_sum         as precipitation_total,
     d.windspeed_avg
 from daily d
-inner join {{ ref('dim_location') }} l on d.location_hk = l.location_hk
+inner join {{ ref('dim_location') }} l on d.location_sk = l.location_sk
 where d.days_ago <= 90
 
 union all
@@ -89,7 +90,7 @@ select
     w.precipitation_total,
     w.windspeed_avg
 from weekly w
-inner join {{ ref('dim_location') }} l on w.location_hk = l.location_hk
+inner join {{ ref('dim_location') }} l on w.location_sk = l.location_sk
 
 union all
 
@@ -106,4 +107,4 @@ select
     w.precipitation_total,
     w.windspeed_avg
 from monthly w
-inner join {{ ref('dim_location') }} l on w.location_hk = l.location_hk
+inner join {{ ref('dim_location') }} l on w.location_sk = l.location_sk

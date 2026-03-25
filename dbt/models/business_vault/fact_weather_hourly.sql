@@ -7,6 +7,9 @@
 }}
 
 -- fact_weather_hourly: stündliche Messwerte mit FKs auf alle Dimensionen
+--
+-- location_sk: Surrogate Key aus dim_location (FK, deterministischer Hash)
+-- location_hk: bleibt als Referenz zum Data Vault Hub erhalten
 
 with weather as (
     select * from {{ ref('s_weather_hourly') }}
@@ -16,13 +19,16 @@ with weather as (
     {% endif %}
 ),
 
-locations as (
-    select location_hk from {{ ref('h_location') }}
+-- Join auf dim_location statt h_location: liefert den Surrogate Key (location_sk)
+-- Aktuell kein SCD2 → einfacher Equi-Join (nur 1 Row pro HK in der Dimension)
+dim_loc as (
+    select location_sk, location_hk from {{ ref('dim_location') }}
 )
 
 select
     -- FKs
-    w.location_hk,
+    dl.location_sk,                                          -- FK → dim_location (Surrogate Key)
+    w.location_hk,                                           -- Referenz → h_location (Hub Hash Key)
     cast(date_format(w.date_key, '%Y%m%d') as integer)  as date_id,
     w.hour                                               as time_id,
 
@@ -43,4 +49,4 @@ select
     w._source_file
 
 from weather w
-inner join locations l on w.location_hk = l.location_hk
+inner join dim_loc dl on w.location_hk = dl.location_hk

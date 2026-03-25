@@ -4,6 +4,113 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Datenquelle 3: Spotify Charts & Artists – Vollständige Pipeline (24.03.2026)
+
+- **Neue Airflow-DAGs**:
+  - `airflow/dags/spotify_initial_load.py` – Einmaliger Bulk-Load der Kaggle-CSVs (Tracks + Charts) → `iceberg.raw.spotify_tracks` und `iceberg.raw.spotify_charts`. Zwei parallele Tasks, idempotent via DELETE+INSERT auf `_source_file`. CSV-Spalten werden auf das Raw-Schema gemappt.
+  - `airflow/dags/spotify_artist_update.py` – Wöchentlicher Artist-Enrichment (Montag 05:00 UTC). Liest distinct artist_name aus Raw → Spotify Search API → JSON-Snapshot in MinIO Landing → `iceberg.raw.spotify_artist_snapshots`. Rate-Limit-Handling mit Retry-After. Basis für SCD2 in dim_artist.
+
+- **Neue dbt-Modelle** (vollständige Strecke Staging → Data Vault → Business Vault → Mart):
+  - `staging/stg_spotify_track.sql` – ephemeral, Hash-Keys (track_hk, artist_hk, track_hashdiff, audio_hashdiff), Type-Casting, NULL-Filter
+  - `staging/stg_spotify_chart.sql` – ephemeral, Hash-Keys (chart_hashdiff, country_hk), Type-Casting
+  - `staging/stg_spotify_artist_snapshot.sql` – ephemeral, Hash-Keys (artist_hk, artist_profile_hashdiff), SCD2-Basis
+  - `data_vault/hubs/h_track.sql` – Hub für Tracks (BK: track_id)
+  - `data_vault/hubs/h_artist.sql` – Hub für Artists, UNION aus Kaggle (artist_name) + API (artist_id), API-BK bevorzugt
+  - `data_vault/hubs/h_country.sql` – Hub für Länder/Regionen (BK: region)
+  - `data_vault/links/l_track_artist.sql` – **Erster Link im Projekt!** Verknüpft Track ↔ Artist (N:M)
+  - `data_vault/satellites/s_track_details.sql` – Track-Stammdaten (Name, Album, Dauer, Genre, Popularity)
+  - `data_vault/satellites/s_track_audio_features.sql` – Separater Satellite für Audio Features (statisch)
+  - `data_vault/satellites/s_artist_profile.sql` – **SCD2-Basis**: artist_name, genres, popularity, followers; Hashdiff über alle Attribute
+  - `data_vault/satellites/s_chart_entry.sql` – Transaktionaler Satellite für Chart-Einträge
+  - `business_vault/dim_artist.sql` – **SCD Type 2 Dimension!** LEAD() für valid_to, is_current Flag, version_number
+  - `business_vault/dim_track.sql` – Track-Dimension mit Audio Features (aktuellste Version)
+  - `business_vault/dim_country.sql` – Länder-Dimension mit CASE-Mapping (region → Ländername)
+  - `business_vault/fact_chart_entry.sql` – Faktentabelle mit FKs auf dim_country, dim_date; track_name/artist_name als degenerierte Dimensionen
+  - `marts/artist_chart_performance.sql` – Multi-granularer Mart (weekly/monthly): Chart-Entries, Best Position, Total Streams, Distinct Tracks/Regions
+
+- **Source-Definitionen erweitert** (`staging/_sources.yml`):
+  - 3 neue Tabellen: `spotify_tracks`, `spotify_charts`, `spotify_artist_snapshots` mit vollständiger Spaltendokumentation
+
+- **Architekturentscheidungen**:
+  - SCD2 auf dim_artist (popularity + followers ändern sich wöchentlich → idealer SCD2-Kandidat)
+  - Audio Features als eigener Satellite (Split by rate of change: statisch vs. dynamisch)
+  - Erster Data Vault Link (l_track_artist) für N:M Track-Artist-Beziehungen
+  - Chart-Daten mit degenerierten Dimensionen (track_name/artist_name als Text, kein FK auf dim_track)
+  - Wöchentlicher API-Schedule (Spotify Popularity ändert sich nicht täglich signifikant)
+
+### Surrogate Key Strategie für Dimensionen (24.03.2026)
+
+- **Neues dbt-Macro `generate_dimension_sk`** (`dbt/macros/generate_dimension_sk.sql`):
+  - Erzeugt deterministischen Hash-Surrogate-Key: `md5(col1 || '|' || col2)`
+  - Wiederverwendbar für alle zukünftigen Dimensionen
+  - Pipe-Separator verhindert Hash-Kollisionen bei Wert-Konkatenation
+
+- **Dimensionen angepasst** (neuer Surrogate Key als PK):
+  - `dim_location.sql` → `location_sk = md5(location_hk || '|' || valid_from)`
+  - `dim_price_zone.sql` → `price_zone_sk = md5(price_zone_hk || '|' || valid_from)`
+  - Hub Hash Key (`location_hk`, `price_zone_hk`) bleibt als Referenzspalte erhalten
+
+- **Faktentabellen angepasst** (FK auf Surrogate Key statt Hub Hash Key):
+  - `fact_weather_hourly.sql` → Join auf `dim_location`, `location_sk` als FK
+  - `fact_energy_price_hourly.sql` → Join auf `dim_price_zone`, `price_zone_sk` als FK
+  - `fact_weather_daily.sql` → `location_sk` in SELECT + GROUP BY
+  - `fact_energy_price_daily.sql` → `price_zone_sk` in SELECT + GROUP BY
+
+- **Marts angepasst** (Joins über Surrogate Key):
+  - `weather_trends.sql` → Join über `location_sk`
+  - `energy_price_trends.sql` → Join über `price_zone_sk`
+
+- **Schema-Tests angepasst** (`business_vault/schema.yml`):
+  - SK-Spalten mit `unique` + `not_null` Tests
+  - `relationships`-Tests in Fakten zeigen auf SK statt HK
+  - HK-Spalten behalten `not_null`, verlieren `unique`
+
+- **Dokumentation**: ADR in `ARCHITECTURE.md` (Abschnitt 3), Konvention in `Memory.md` (ADR-007)
+
+### Datenquelle 2: Energy-Charts Day-Ahead-Spotpreise (23.03.2026)
+
+- **Neuer Airflow-DAG `energy_charts_to_raw`** (`airflow/dags/energy_charts_to_raw.py`):
+  - Holt stündliche Day-Ahead-Spotpreise von `https://api.energy-charts.info/price?bzn=DE-LU`
+  - Kein API-Key erforderlich, Lizenz: CC BY 4.0 (Bundesnetzagentur | SMARD.de)
+  - Task 1 `fetch_to_landing`: Rohdaten als JSON in MinIO `landing/json/energy_prices/YYYY-MM-DD.json`
+  - Task 2 `landing_to_raw`: JSON → `iceberg.raw.energy_price_hourly` (Trino), idempotent via DELETE+INSERT
+  - `start_date=2018-10-01` (ältestes Datum für DE-LU; vorher DE-AT-LU, liefert HTTP 404)
+  - Airflow Variable: `ENERGY_CHARTS_BIDDING_ZONE` (default: `DE-LU`)
+
+- **Neue dbt-Modelle** (vollständige Strecke Staging → Data Vault → Business Vault → Mart):
+  - `staging/stg_energy_price.sql` – ephemeral, Hash-Keys, Typ-Casting, NULL-Filter
+  - `data_vault/hubs/h_price_zone.sql` – Hub für Gebotszonen (BK: `bidding_zone`)
+  - `data_vault/satellites/s_energy_price_hourly.sql` – Satellit, stündliche Preise, append-only
+  - `business_vault/dim_price_zone.sql` – Dimension, TABLE-materialisiert
+  - `business_vault/fact_energy_price_hourly.sql` – stündliche Faktentabelle mit FKs auf dim_date, dim_time
+  - `business_vault/fact_energy_price_daily.sql` – Tagesaggregation (min, max, avg, stddev, negative_price_hours)
+  - `marts/energy_price_trends.sql` – daily/weekly/monthly UNION ALL, direkt für Grafana/Dremio
+
+- **Neue dbt Custom Tests**:
+  - `assert_price_plausible.sql`: Preise zwischen -500 und 3000 EUR/MWh (negative Preise erlaubt)
+  - `assert_daily_price_completeness.sql`: genau 24 Rows pro Tag und Gebotszone
+
+- **YAML-Ergänzungen** in `_sources.yml`, `staging/schema.yml`, `hubs/schema.yml`,
+  `satellites/schema.yml`, `business_vault/schema.yml`, `marts/schema.yml`
+
+### EXTERNAL_HOST – Remote-Zugriff auf den Stack (23.03.2026)
+
+- **Feature**: Neue Variable `EXTERNAL_HOST` in `.env` ermöglicht Zugriff von externen Rechnern
+  - Default: `localhost` (keine Verhaltensänderung für lokale Entwicklung)
+  - Bei Setzung auf eine IP/Hostname (z.B. `192.168.1.50`):
+    - MinIO `MINIO_BROWSER_REDIRECT_URL` zeigt auf `http://<EXTERNAL_HOST>:9001`
+    - Keycloak Redirect URIs werden um `EXTERNAL_HOST`-Einträge erweitert (MinIO, Airflow, Trino)
+- **`start.sh`** (NEU): Wrapper-Script für VM-Deployments
+  - Erkennt Netzwerk-IP automatisch (`hostname -I` auf Linux, `ipconfig getifaddr en0` auf macOS)
+  - Setzt `EXTERNAL_HOST` in `.env`
+  - Startet `docker compose up -d --build`
+  - Wartet auf Keycloak-Healthcheck, dann Update der Redirect URIs
+- **`init-scripts/update-keycloak-redirects.sh`** (NEU): Idempotentes Script das Keycloak-Clients via Admin API aktualisiert
+  - Fügt EXTERNAL_HOST-basierte Redirect URIs zu bestehenden Clients hinzu (MinIO, Airflow, Trino)
+  - Bestehende localhost-Einträge bleiben erhalten
+- **Bekannte Einschränkung**: `/etc/hosts`-Eintrag `<VM-IP> keycloak` auf Client-Rechnern weiterhin erforderlich (Split-DNS-Problem mit `KC_HOSTNAME=keycloak`)
+  - Langfristige Lösung: Traefik Reverse Proxy + dnsmasq (dokumentiert in Tasks.md)
+
 ### dbt Schema-Naming & Deduplizierung (23.03.2026)
 
 - **dbt-Metadaten in OpenMetadata**: dbt-Ingestion-Pipeline manuell getriggert → Beschreibungen, Tags (`dbtTags.hub`, `dbtTags.satellite`), Test-Ergebnisse und **Lineage** sind jetzt im OM-Katalog sichtbar.

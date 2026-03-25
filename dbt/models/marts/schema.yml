@@ -42,3 +42,45 @@ models:
         description: "Gesamtniederschlag der Periode in mm"
       - name: windspeed_avg
         description: "Mittlere Windgeschwindigkeit der Periode in km/h"
+
+  - name: energy_price_trends
+    description: >
+      Aggregierter Mart für Preistrend-Analysen, UNION ALL aus drei Granularitäten:
+      - daily:   letzte 90 Tage (Tageswerte aus fact_energy_price_daily)
+      - weekly:  alle Wochen ab 2018-10-01 (Wochenmittel)
+      - monthly: alle Monate ab 2018-10-01 (Monatsmittel)
+      Direkt für Dashboards (Grafana, Dremio) nutzbar ohne weitere Transformation.
+      Materialisierung: table.
+    columns:
+      - name: bidding_zone
+        description: "Gebotszone (z.B. 'DE-LU')"
+        tests:
+          - not_null
+      - name: granularity
+        description: "Aggregationsebene: 'daily', 'weekly' oder 'monthly'"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['daily', 'weekly', 'monthly']
+      - name: period_label
+        description: "Lesbares Periode-Label: Datum (daily), 'YYYY-Www' (weekly), 'YYYY-MM' (monthly)"
+        tests:
+          - not_null
+      - name: year
+        description: "Jahr der Aggregationsperiode"
+        tests:
+          - not_null
+      - name: month
+        description: "Monat der Aggregationsperiode (NULL bei weekly)"
+      - name: week
+        description: "Kalenderwoche (NULL bei monthly)"
+      - name: price_avg
+        description: "Durchschnittspreis der Periode in EUR/MWh"
+      - name: price_min
+        description: "Günstigste Stunde der Periode in EUR/MWh"
+      - name: price_max
+        description: "Teuerste Stunde der Periode in EUR/MWh"
+      - name: price_stddev
+        description: "Mittlere Standardabweichung der Periode – Maß für Preisvolatilität"
+      - name: negative_price_hours
+        description: "Anzahl Stunden mit negativem Preis in der Periode"
