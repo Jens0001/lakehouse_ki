@@ -4,6 +4,25 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Cognos Analytics → OpenMetadata Ingestion (25.03.2026)
+
+- **Neues Skript**: `scripts/cognos_to_openmetadata.py`
+  - Liest Cognos Data Module JSON und erstellt Dashboard Data Models in OpenMetadata (Spalten, Datentypen, Usage-Tags, Beziehungen, Drill-Hierarchien)
+  - Liest Cognos Dashboard JSON und erstellt Dashboard- + Chart-Entitäten in OpenMetadata (Tabs, Widgets, Chart-Typ-Mapping, referenzierte Spalten)
+  - Erzeugt Lineage: Trino-Tabellen → Data Models → Dashboard → Charts (Ende-zu-Ende)
+  - Classification `CognosAnalytics` mit Tags: Identifier, Attribute, Measure
+  - Reine Python-Stdlib, keine externen Abhängigkeiten, idempotent (PUT-Upserts)
+  - CLI: `--dry-run` zum Validieren, `-v` für Debug, `--dashboard` für Dashboard-Modus, Env-Vars `OM_URL`, `OM_TOKEN`, `OM_TRINO_SVC`
+  - Dashboard-Parser (`CognosDashboard`): Extrahiert Tabs, Widgets, Chart-Typen, referenzierte Spalten mit Slot-Mapping
+  - Dashboard-Ingestion: Erstellt OM Dashboard + Charts, verknüpft mit Data Models über Datenmodul-Name-Matching
+  - Dry-Run getestet: 9 Query Subjects / 48 Spalten (Datenmodul), 6 Tabs / 13 Widgets / 21 Spalten (Dashboard)
+- **Neuer Airflow-DAG**: `airflow/dags/cognos_to_openmetadata_dag.py`
+  - Täglicher Lauf um 06:00 UTC
+  - Liest JSON-Exporte aus `/opt/airflow/cognos_exports/`
+  - Task-Reihenfolge: Datenmodule zuerst, dann Dashboards (Abhängigkeit)
+- **Dokumentation**: `ARCHITECTURE.md` Abschnitt "Cognos Data Module → Katalog Bridge" vollständig überarbeitet mit Datenmodul- und Dashboard-Ingestion, Mapping-Tabellen und Lineage-Diagramm
+- **Dokumentation**: `Memory.md` technische Referenz ergänzt
+
 ### Datenquelle 3: Spotify Charts & Artists – Vollständige Pipeline (24.03.2026)
 
 - **Neue Airflow-DAGs**:
@@ -841,6 +860,6 @@ Für Änderungen bitte:
 
 ---
 
-**Letzte Aktualisierung**: 18. März 2026  
+**Letzte Aktualisierung**: 25. März 2026  
 **Bearbeitet von**: GitHub Copilot  
 **Status**: 🟡 In Development

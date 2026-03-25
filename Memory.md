@@ -1263,3 +1263,84 @@ wait  # wartet auf alle direkten Background-Jobs
 - Config-Key: `AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS=true` → alle definierten User erhalten Admin-Rechte
 - Health-Endpoint: `GET /api/v2/monitor/health` (Response: `{"metadatabase":{"status":"healthy"},"scheduler":{...}}`)
 - Airflow 2.x Health-Endpoint `/health` existiert in 3.x **nicht mehr**
+
+---
+
+## 🔧 Cognos Analytics → OpenMetadata Bridge (25. März 2026)
+
+### Skript: `scripts/cognos_to_openmetadata.py`
+
+**Zweck**: Cognos Analytics JSON-Exporte (Datenmodule + Dashboards) in OpenMetadata ingesten. Schließt die Lineage-Lücke zwischen Trino-Tabellen und der Cognos BI-Schicht.
+
+**Klassen**:
+- `OMClient` – Minimaler REST-Client (urllib), Bearer-Auth, GET/PUT/POST/PATCH
+- `CognosDataModule` – Parser für Data Module JSON (querySubject[], relationship[], drillGroup[], customSort[])
+- `CognosOMIngester` – Erstellt OM-Entitäten: Dashboard Service, Classification+Tags, Data Models, Lineage
+
+**Datentyp-Mapping** (Cognos → OM):
+| Cognos | OpenMetadata |
+|--------|-------------|
+| BIGINT | BIGINT |
+| INTEGER | INT |
+| VARCHAR(...) | VARCHAR |
+| DATE | DATE |
+| TIME | TIME |
+| TIMESTAMP_TZ | TIMESTAMPZ |
+| DECIMAL(x,y) | DECIMAL |
+
+**Usage-Tag-Mapping**:
+- `identifier` → Classification `CognosAnalytics.Identifier`
+- `attribute` → Classification `CognosAnalytics.Attribute`
+- `fact` → Classification `CognosAnalytics.Measure`
+
+**Namenskonvention**:
+- Modul-Name: `module.label` (z.B. "Heizung Zeitverlauf Trino Lakehouse")
+- OM-Entity-Name: Sanitized Label (Leerzeichen → Unterstriche): `Heizung_Zeitverlauf_Trino_Lakehouse`
+- Data-Model FQN: `cognos_analytics.Heizung_Zeitverlauf_Trino_Lakehouse__dim_tag`
+- Matching Dashboard→Datenmodul: über `dataSources.sources[].name` == `module.label`
+
+**CLI-Aufruf**:
+```bash
+# Datenmodul Dry-Run (nur parsen + validieren):
+python3 scripts/cognos_to_openmetadata.py --dry-run -v /pfad/zu/datamodule.json
+
+# Datenmodul produktiv:
+OM_URL=http://localhost:8585/api OM_TOKEN=eyJ... python3 scripts/cognos_to_openmetadata.py /pfad/zu/datamodule.json
+
+# Dashboard Dry-Run:
+python3 scripts/cognos_to_openmetadata.py --dashboard --dry-run -v /pfad/zu/dashboard.json
+
+# Dashboard produktiv (Datenmodul muss vorher ingestiert worden sein):
+OM_URL=http://localhost:8585/api OM_TOKEN=eyJ... python3 scripts/cognos_to_openmetadata.py --dashboard /pfad/zu/dashboard.json
+```
+
+**CLI-Argumente**:
+- Positional `JSON_FILE`: Pfad zur Cognos JSON-Datei
+- `--dashboard`: Dashboard-Modus (statt Datenmodul-Modus)
+- `--dry-run`: Nur parsen, keine API-Calls
+- `-v` / `--verbose`: Debug-Logging (zeigt Slot-Mappings etc.)
+
+**Cognos Dashboard JSON – Struktur-Referenz**:
+- Widgets: `layout.items[].items[].items[]` (3 Ebenen: Tab → genericPage → Widget)
+- Widget-Typ: `type: "widget"`
+- Titel: `features.Models_internal.name.translationTable.Default`
+- Chart-Typ: `features.Models_internal.visId` (z.B. `com.ibm.vis.rave2bundlecolumn` → Bar)
+- Daten: `features.Models_internal.data.dataViews[].dataItems[].itemId` (z.B. `dim_tag.year_`)
+- Datenmodul-Referenz: `dataSources.sources[].name` = Label des Datenmoduls
+- Globale Spaltenliste: `features.MetadataLoader.metadataSubsetIds`
+- Synthetische Items (`_multiMeasuresSeries`) müssen gefiltert werden
+
+**Getestetes Datenmodul**: "Heizung Zeitverlauf Trino Lakehouse"
+- 9 Query Subjects, 48 Spalten, 8 Relationships, 1 Drill Group, 1 Custom Sort
+- Dry-Run validiert alle Spalten korrekt (Datentypen, Usage-Tags, Aggregationen)
+
+**Getestetes Dashboard**: "Jahresauswertung Heizkosten Lakehouse"
+- 6 Tabs, 13 Widgets, 21 referenzierte Spalten aus 8 Query Subjects
+- Dashboard-Dry-Run validiert: alle Tabs, Widgets, Chart-Typen, Slot-Mappings korrekt
+- visId-Mapping: bundlecolumn→Bar, rave2line→Line, bundlecomposite→Other, stackedcolumn→Bar, bundlebar→Bar
+
+**Klassen (Dashboard-Erweiterung)**:
+- `CognosDashboard` – Parser für Dashboard JSON (Tabs, Widgets, Datenquellen, MetadataLoader)
+- `CognosOMIngester.ingest_dashboard()` – Erstellt Dashboard + Charts in OM, verknüpft mit Data Models
+- `CognosOMIngester._ingest_chart()` – Erstellt Chart-Entitäten pro Widget
+- `CognosOMIngester._build_dashboard_description()` – Markdown mit Tab-Übersicht und Spalten-Gruppierung
