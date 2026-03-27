@@ -133,6 +133,7 @@ def load_tracks_to_raw(**_):
     hook = TrinoHook(trino_conn_id="trino_default")
 
     # Tabelle anlegen, falls noch nicht vorhanden
+    # Snapshot-Retention: 5 Minuten (300000ms) um Metadaten zu reduzieren
     hook.run(f"""
         CREATE TABLE IF NOT EXISTS {RAW_TRACKS_TABLE} (
             track_id            VARCHAR,
@@ -159,7 +160,10 @@ def load_tracks_to_raw(**_):
             _loaded_at          TIMESTAMP
         )
         WITH (
-            format = 'PARQUET'
+            format = 'PARQUET',
+            write_metadata_previous_versions_max = 2,
+            history_expire_min_snaps_to_keep = 1,
+            history_expire_max_snapshot_age_ms = 300000
         )
     """)
 
@@ -206,8 +210,8 @@ def load_tracks_to_raw(**_):
         rows.append(values)
         row_count += 1
 
-        # Batch-Insert in Blöcken von 500 Rows
-        if len(rows) >= 500:
+        # Batch-Insert in Blöcken von 50 Rows (Trino hat Token-Limit von 10000)
+        if len(rows) >= 100:
             insert_sql = f"INSERT INTO {RAW_TRACKS_TABLE} VALUES {', '.join(rows)}"
             hook.run(insert_sql)
             rows = []
@@ -225,19 +229,18 @@ def load_tracks_to_raw(**_):
 # ---------------------------------------------------------------------------
 def load_charts_to_raw(**_):
     """
-    Liest die Charts-CSV aus MinIO und schreibt sie per Trino INSERT in die Raw-Tabelle.
+    Liest die Charts-CSV aus MinIO (in Chunks) und schreibt sie per Trino INSERT in die Raw-Tabelle.
 
     Erwartete CSV-Spalten (Kaggle Spotify Charts Dataset):
       title, rank, date, artist, url, region, chart, trend, streams
 
     Hinweis: 'streams' kann leer sein (vor allem bei Viral-50-Charts).
     'chart' ist 'top200' oder 'viral50'.
+
+    Chunks: Datei wird in 10MB-Blöcken gelesen, um OOM zu vermeiden
     """
     s3 = _get_minio_client()
     obj = s3.get_object(Bucket=BUCKET, Key=CHARTS_KEY)
-    content = obj["Body"].read().decode("utf-8")
-
-    reader = csv.DictReader(io.StringIO(content))
 
     hook = TrinoHook(trino_conn_id="trino_default")
 
@@ -258,7 +261,10 @@ def load_charts_to_raw(**_):
         )
         WITH (
             format       = 'PARQUET',
-            partitioning = ARRAY['region']
+            partitioning = ARRAY['region'],
+            write_metadata_previous_versions_max = 2,
+            history_expire_min_snaps_to_keep = 1,
+            history_expire_max_snapshot_age_ms = 300000
         )
     """)
 
@@ -271,36 +277,72 @@ def load_charts_to_raw(**_):
 
     loaded_at = datetime.utcnow().isoformat(sep=" ", timespec="seconds")
 
-    rows = []
+    # Lese CSV in Chunks (10MB) um OOM zu vermeiden
+    chunk_size = 10 * 1024 * 1024  # 10MB
+    buffer = ""
     row_count = 0
+    rows = []
 
-    for row in reader:
-        # 'date' aus CSV → chart_date, 'rank' → position, 'title' → track_name
-        chart_date = row.get("date", "")
-        if not chart_date:
-            continue  # Überspringe Rows ohne Datum
+    for chunk in iter(lambda: obj["Body"].read(chunk_size), b''):
+        buffer += chunk.decode("utf-8", errors="replace")
 
-        values = (
-            f"(DATE '{chart_date}', "
-            f"{_sql_value(row.get('rank'), 'integer')}, "
-            f"{_sql_value(row.get('title'))}, "
-            f"{_sql_value(row.get('artist'))}, "
-            f"{_sql_value(row.get('streams'), 'integer')}, "
-            f"{_sql_value(row.get('region'))}, "
-            f"{_sql_value(row.get('chart'))}, "
-            f"{_sql_value(row.get('trend'))}, "
-            f"{_sql_value(row.get('url'))}, "
-            f"'{source_file}', "
-            f"TIMESTAMP '{loaded_at}')"
-        )
-        rows.append(values)
-        row_count += 1
+        # Teile Buffer in Zeilen auf
+        lines = buffer.split('\n')
+        # Behälte die letzte unvollständige Zeile für die nächste Iteration
+        buffer = lines[-1]
 
-        # Batch-Insert in Blöcken von 500 Rows
-        if len(rows) >= 500:
-            insert_sql = f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}"
-            hook.run(insert_sql)
-            rows = []
+        # Verarbeite alle vollständigen Zeilen
+        reader = csv.DictReader(lines[:-1])
+        for row in reader:
+            chart_date = row.get("date", "")
+            if not chart_date:
+                continue
+
+            values = (
+                f"(DATE '{chart_date}', "
+                f"{_sql_value(row.get('rank'), 'integer')}, "
+                f"{_sql_value(row.get('title'))}, "
+                f"{_sql_value(row.get('artist'))}, "
+                f"{_sql_value(row.get('streams'), 'integer')}, "
+                f"{_sql_value(row.get('region'))}, "
+                f"{_sql_value(row.get('chart'))}, "
+                f"{_sql_value(row.get('trend'))}, "
+                f"{_sql_value(row.get('url'))}, "
+                f"'{source_file}', "
+                f"TIMESTAMP '{loaded_at}')"
+            )
+            rows.append(values)
+            row_count += 1
+
+            # Batch-Insert in Blöcken von 100 Rows
+            if len(rows) >= 100:
+                insert_sql = f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}"
+                hook.run(insert_sql)
+                rows = []
+
+    # Verarbeite letzte Zeile, falls vorhanden
+    if buffer.strip():
+        reader = csv.DictReader([buffer])
+        for row in reader:
+            chart_date = row.get("date", "")
+            if not chart_date:
+                continue
+
+            values = (
+                f"(DATE '{chart_date}', "
+                f"{_sql_value(row.get('rank'), 'integer')}, "
+                f"{_sql_value(row.get('title'))}, "
+                f"{_sql_value(row.get('artist'))}, "
+                f"{_sql_value(row.get('streams'), 'integer')}, "
+                f"{_sql_value(row.get('region'))}, "
+                f"{_sql_value(row.get('chart'))}, "
+                f"{_sql_value(row.get('trend'))}, "
+                f"{_sql_value(row.get('url'))}, "
+                f"'{source_file}', "
+                f"TIMESTAMP '{loaded_at}')"
+            )
+            rows.append(values)
+            row_count += 1
 
     # Rest-Batch schreiben
     if rows:
@@ -335,4 +377,5 @@ with DAG(
     )
 
     # Tracks und Charts können parallel geladen werden – keine Abhängigkeit
-    [t1_tracks, t2_charts]
+    #[t1_tracks, t2_charts]
+    [t2_charts]
