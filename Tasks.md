@@ -167,6 +167,55 @@
   - `dim_date`: date_id eindeutig und lückenlos zwischen 20200101 und 20301231
   - `s_weather_hourly`: keine Dopplungen (location_hk + measured_at eindeutig)
 
+- [ ] **Erweiterte Data Quality Checks: dbt-expectations oder Great Expectations**
+  - **Problem**: Aktuelle dbt-Tests prüfen nur Schema-Ebene (not_null, unique, accepted_values, relationships). Inhaltliche Anomalien werden nicht erkannt – z.B. plötzlicher Einbruch der Zeilenanzahl, statistische Ausreißer, fehlende Tage in Zeitreihen.
+  - **Option A – dbt-expectations** (bevorzugt, kein neuer Service):
+    - Package `calogica/dbt_expectations` in `packages.yml` ergänzen
+    - Beispiel-Tests für bestehende Modelle:
+      - `expect_row_count_to_be_between` auf `iceberg.raw.weather_hourly` (min 24 Rows pro Tag×Standort)
+      - `expect_column_values_to_be_between` auf `temperature_2m` (z.B. -50°C bis +60°C)
+      - `expect_column_mean_to_be_between` auf `price_eur_mwh` (historischer Mittelwert ±3σ)
+      - `expect_table_row_count_to_equal_other_table` → Raw vs. Staging Zeilenzahl-Abgleich
+      - `expect_multicolumn_sum_to_be_between` für Konsistenz-Checks (z.B. precipitation_sum ≈ Σ hourly)
+    - Tests in `schema.yml` der jeweiligen Modelle ergänzen, laufen im bestehenden `dbt test`-Task
+  - **Option B – Great Expectations** (eigenständig, mehr Aufwand):
+    - GE als Python-Package im Airflow-Container installieren
+    - Eigener Airflow-Task nach `dbt_run` und vor `dbt_test`
+    - Vorteil: Profiling-Reports (HTML), Data Docs als statische Seite hostbar
+  - **Ziel**: Anomalien in Datenlieferungen automatisch erkennen, bevor sie in Marts landen
+
+- [ ] **dbt-Modelle auf inkrementelle Materialisierung umstellen**
+  - **Problem**: Alle dbt-Modelle nutzen aktuell `materialized='table'` (Full Refresh bei jedem Run). Bei wachsenden Datenmengen (Weather: 12k+ Rows, Energy: potentiell Millionen stündliche Preise) wird das zunehmend langsam und ressourcenintensiv.
+  - **Kandidaten für `materialized='incremental'`** (nach Priorität):
+    1. **`s_weather_hourly`** – Satellite, append-only Natur, ideal für incremental
+       - Strategie: `incremental_strategy='append'`, Filter `WHERE _loaded_at > (SELECT MAX(_loaded_at) FROM {{ this }})`
+    2. **`s_energy_price_hourly`** – gleiche Logik wie Weather-Satellite
+    3. **`fact_weather_hourly`** / **`fact_energy_price_hourly`** – Business Vault Facts
+       - Strategie: `merge` auf `unique_key` (z.B. `location_hk || '_' || measured_at`)
+    4. **`fact_weather_daily`** / **`fact_energy_price_daily`** – Aggregate, nur neue Tage nachrechnen
+       - Filter: `WHERE date_key >= (SELECT MAX(date_key) - INTERVAL '2' DAY FROM {{ this }})`
+  - **Nicht umstellen** (Full Refresh sinnvoll):
+    - Hubs (`h_location`, `h_price_zone`) – klein, Deduplizierung erfordert Gesamtbild
+    - Dims mit SCD2 (`dim_artist`) – LEAD() Window Function braucht alle Rows
+    - Marts (`weather_trends`, `energy_price_trends`) – aggregiert, klein
+  - **Voraussetzung**: Trino + Iceberg muss `MERGE INTO` unterstützen (ab Trino 400+ und Iceberg v2 gegeben)
+  - **Testplan**: Erst ein Modell umstellen (z.B. `s_weather_hourly`), mit `dbt run --select s_weather_hourly` testen, Zeilenanzahl vor/nach vergleichen, dann weitere Modelle schrittweise
+
+- [ ] **OpenLineage in Airflow aktivieren**
+  - **Problem**: OM-native Ingestion liefert Lineage aus dbt-Artefakten (manifest.json), aber keine **Runtime-Lineage** – d.h. es fehlt die Info, welcher konkrete DAG-Run welche Partition/Tabelle geschrieben hat, mit welchen Input-Datasets und wann.
+  - **Umsetzung** (minimaler Aufwand – eine Env-Variable + ein Package):
+    1. `apache-airflow-providers-openlineage` in `airflow/Dockerfile` installieren (pip install)
+    2. Env-Variable in `docker-compose.yml` unter `airflow.environment` ergänzen:
+       - `OPENLINEAGE_URL=http://openmetadata-server:8585/api/v1/lineage`
+       - `OPENLINEAGE_NAMESPACE=lakehouse_airflow`
+    3. OM empfängt dann automatisch OpenLineage-Events bei jedem Task-Run
+  - **Was danach sichtbar wird**:
+    - DAG `open_meteo_to_raw`: Input `open-meteo.com API` → Output `iceberg.raw.weather_hourly` (pro Run)
+    - DAG `energy_charts_to_raw`: Input `api.energy-charts.info` → Output `iceberg.raw.energy_price_hourly`
+    - DAG `dbt_run_lakehouse_ki`: Input `iceberg.raw.*` → Output `iceberg.marts.*` (gesamte dbt-Lineage als Runtime-Events)
+  - **Validierung**: Nach einem DAG-Run in OM UI → Lineage-Tab der Tabelle prüfen → Runtime-Kanten müssen sichtbar sein
+  - **Hinweis**: OM-native Airflow-Ingestion (täglich 02:00 UTC) liefert DAG-Struktur, OpenLineage ergänzt die Runtime-Ebene – beides komplementär, kein Entweder-Oder
+
 ---
 
 ### Data Governance Katalog
@@ -225,7 +274,55 @@
 
 ---
 
-### Infrastruktur
+### Infrastruktur – Stack-Härtung & Observability
+
+- [ ] **PostgreSQL 13 → 15+ upgraden**
+  - Shared Postgres (`postgres:13`) für Airflow + Keycloak ist EOL (Nov 2025)
+  - OM-DB nutzt bereits `postgres:15-alpine` → einheitlich auf 15 oder 16 heben
+  - Änderung in `docker-compose.yml`: Image `postgres:13` → `postgres:16-alpine`
+  - Nach Upgrade: `docker compose down -v` (Airflow DB wird per `airflow db migrate` neu erstellt)
+  - Keycloak-DB prüfen: Flyway-Migration läuft beim Start automatisch
+  - **Risiko**: Volume `postgres_data` ist nicht kompatibel zwischen Major-Versionen → `pg_dump` vorher!
+
+- [ ] **Healthchecks für MinIO und Nessie ergänzen**
+  - **MinIO** hat keinen Healthcheck → `minio-init` startet per `service_started` (Race Condition möglich)
+    - MinIO bietet `/minio/health/live` Endpoint auf Port 9000
+    - Healthcheck: `curl -sf http://localhost:9000/minio/health/live || exit 1`
+    - Danach `minio-init` auf `condition: service_healthy` umstellen
+  - **Nessie** hat keinen Healthcheck → `trino` startet ohne Garantie dass Catalog bereit ist
+    - Nessie REST API: `GET /api/v2/config` liefert 200 wenn bereit
+    - Healthcheck: `curl -sf http://localhost:19120/api/v2/config || exit 1`
+    - Trino `depends_on.nessie` auf `condition: service_healthy` setzen
+
+- [ ] **Monitoring: Prometheus + Grafana integrieren**
+  - Ziel: Container-Metriken, Query-Laufzeiten, Airflow Task Duration, DAG-Erfolgsraten zentral sichtbar
+  - **Prometheus** als Scraper (neuer Service in docker-compose.yml, Port 9090)
+    - Scrape-Targets mit nativen Endpoints:
+      - Trino: `/v1/info` und JMX-Exporter (Port 9090 intern, `jmx_exporter.yml` in `trino/etc/`)
+      - Airflow: `AIRFLOW__METRICS__STATSD_ON=true` + StatsD-Exporter → Prometheus
+      - OpenMetadata: `/api/v1/system/version` (Healthcheck), Dropwizard-Metriken auf Port 8586
+      - MinIO: `/minio/v2/metrics/cluster` (Prometheus-Format nativ)
+      - PostgreSQL: `postgres-exporter` Sidecar (Connections, Locks, Replication Lag)
+    - cAdvisor oder Docker-Daemon Metrics für Container-Ressourcen (CPU, RAM, Network I/O)
+  - **Grafana** als Dashboard-UI (neuer Service, Port 3000)
+    - Provisioning: `grafana/provisioning/datasources/prometheus.yml` → automatische Prometheus-Anbindung
+    - Community-Dashboards: Trino (#12345), Airflow (#11276), PostgreSQL (#9628)
+  - Config-Dateien: `monitoring/prometheus.yml`, `monitoring/grafana/provisioning/`
+  - Optionale Alerting-Rules: DAG-Failure, Container-Restart, Disk-Nutzung >80%
+
+- [ ] **Log-Aggregation: Loki + Promtail (oder Docker Log Driver)**
+  - **Problem**: Airflow-Logs liegen auf Disk (`./airflow/logs/`), alle anderen Services nur in Docker stdout – kein zentrales Debugging möglich
+  - **Option A – Grafana Loki Stack** (empfohlen, passt zu Prometheus+Grafana):
+    - `promtail` als Sidecar: liest Docker-Container-Logs via `/var/lib/docker/containers/`
+    - `loki` als Log-Backend (neuer Service, Port 3100)
+    - Grafana-Datasource `loki` hinzufügen → Logs + Metriken in einer UI
+    - Airflow Task-Logs: Remote Logging auf S3 (MinIO) umstellen (`AIRFLOW__LOGGING__REMOTE_LOGGING=true`, `AIRFLOW__LOGGING__REMOTE_BASE_LOG_FOLDER=s3://airflow-logs/`)
+      - Bucket `airflow-logs` wird bereits von `minio-init` angelegt
+  - **Option B – Docker Compose Logging** (minimal):
+    - `logging:` Block in docker-compose.yml mit `json-file` Driver + `max-size: 10m` + `max-file: 3`
+    - Verhindert zumindest unkontrolliertes Log-Wachstum
+  - Ziel: Alle Container-Logs zentral durchsuchbar, korrelierbar mit Metriken (gleicher Zeitraum in Grafana)
+
 - [ ] **Alle Secrets in `.env` für Production absichern**
   - `KEYCLOAK_ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, alle `CLIENT_SECRET_*`
   - `.env.example` mit `CHANGE_ME_*` Platzhaltern liegt als Vorlage bereit
