@@ -6,16 +6,23 @@
 # Browser-Redirects (MinIO, Keycloak OIDC) auf die richtige Adresse zeigen.
 #
 # Verwendung:
-#   ./start.sh              # Automatische IP-Erkennung
-#   ./start.sh 192.168.1.50 # Manuelle IP/Hostname
-#   ./start.sh localhost    # Explizit localhost (lokale Entwicklung)
+#   ./start.sh                    # Automatische IP-Erkennung (schneller Start)
+#   ./start.sh 192.168.1.50       # Manuelle IP/Hostname
+#   ./start.sh localhost          # Explizit localhost (lokale Entwicklung)
+#   ./start.sh --build            # Mit Docker Image Rebuild (nach Code-Änderungen)
+#   ./start.sh 192.168.1.50 --build # IP + Rebuild
+#
+# Hinweise:
+#   - --build ist nur nötig nach Airflow Dockerfile/Dependency-Änderungen
+#   - DAG/Plugin-Änderungen brauchen KEIN --build (schneller Restart)
 # ============================================================================
 set -euo pipefail
 
 COMPOSE_FILE="docker-compose.yml"
 ENV_FILE=".env"
+BUILD_FLAG=""
 
-# --- IP-Erkennung -----------------------------------------------------------
+# --- Parameter-Verarbeitung --------------------------------------------------
 detect_ip() {
   local ip=""
   case "$(uname -s)" in
@@ -31,14 +38,28 @@ detect_ip() {
   echo "${ip:-localhost}"
 }
 
-if [ $# -ge 1 ]; then
-  EXTERNAL_HOST="$1"
-else
+# Parse arguments: IP kann 1. oder 2. Argument sein, --build ist optional
+EXTERNAL_HOST=""
+for arg in "$@"; do
+  if [ "$arg" = "--build" ]; then
+    BUILD_FLAG="--build"
+  elif [ -z "$EXTERNAL_HOST" ]; then
+    EXTERNAL_HOST="$arg"
+  fi
+done
+
+# Falls keine IP angegeben, auto-detect
+if [ -z "$EXTERNAL_HOST" ]; then
   EXTERNAL_HOST=$(detect_ip)
 fi
 
 echo "=== Lakehouse KI Start ==="
 echo "EXTERNAL_HOST: ${EXTERNAL_HOST}"
+if [ -n "$BUILD_FLAG" ]; then
+  echo "Build Mode: JA (--build)"
+else
+  echo "Build Mode: NEIN (schneller Start)"
+fi
 
 # --- .env aktualisieren -----------------------------------------------------
 if [ ! -f "$ENV_FILE" ]; then
@@ -64,7 +85,13 @@ fi
 # --- Docker Compose starten -------------------------------------------------
 echo ""
 echo "Starte Stack..."
-docker compose up -d --build
+if [ -n "$BUILD_FLAG" ]; then
+  echo "  (mit Docker Image Rebuild)"
+  docker compose up -d --build
+else
+  echo "  (ohne Rebuild – schneller Start)"
+  docker compose up -d
+fi
 
 # --- Keycloak Redirect URIs aktualisieren ------------------------------------
 if [ "${EXTERNAL_HOST}" != "localhost" ]; then

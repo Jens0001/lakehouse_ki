@@ -34,15 +34,15 @@ fi
 echo "Keycloak Admin Token erhalten."
 
 # --- Client Redirect URIs aktualisieren --------------------------------------
-# Format: clientId|redirectUri(s, kommasepariert)|webOrigin(s, kommasepariert)
+# Format: clientId|redirectUri(s, kommasepariert)|webOrigin(s, kommasepariert)|rootUrl|adminUrl
 CLIENTS=(
-  "minio|http://${EXTERNAL_HOST}:9001/oauth_callback|http://${EXTERNAL_HOST}:9001"
-  "airflow|http://${EXTERNAL_HOST}:8081/auth/oauth-authorized/keycloak|http://${EXTERNAL_HOST}:8081"
-  "trino|https://${EXTERNAL_HOST}:8443/oauth2/callback,https://${EXTERNAL_HOST}:8443/ui/api/login/oauth2/callback,http://${EXTERNAL_HOST}:8080/oauth2/callback|https://${EXTERNAL_HOST}:8443,http://${EXTERNAL_HOST}:8080"
+  "minio|http://${EXTERNAL_HOST}:9001/oauth_callback|http://${EXTERNAL_HOST}:9001|http://${EXTERNAL_HOST}:9001|http://${EXTERNAL_HOST}:9001"
+  "airflow|http://${EXTERNAL_HOST}:8081/auth/oauth-authorized/keycloak|http://${EXTERNAL_HOST}:8081|http://${EXTERNAL_HOST}:8081|http://${EXTERNAL_HOST}:8081"
+  "trino|https://${EXTERNAL_HOST}:8443/oauth2/callback,https://${EXTERNAL_HOST}:8443/ui/api/login/oauth2/callback,http://${EXTERNAL_HOST}:8080/oauth2/callback|https://${EXTERNAL_HOST}:8443,http://${EXTERNAL_HOST}:8080|https://${EXTERNAL_HOST}:8443|https://${EXTERNAL_HOST}:8443"
 )
 
 for entry in "${CLIENTS[@]}"; do
-  IFS='|' read -r CLIENT_ID NEW_REDIRECTS NEW_ORIGINS <<< "$entry"
+  IFS='|' read -r CLIENT_ID NEW_REDIRECTS NEW_ORIGINS NEW_ROOT_URL NEW_ADMIN_URL <<< "$entry"
 
   # Client UUID holen
   CLIENT_UUID=$(curl -sf "${KEYCLOAK_URL}/admin/realms/${REALM}/clients?clientId=${CLIENT_ID}" \
@@ -57,17 +57,23 @@ for entry in "${CLIENTS[@]}"; do
   CLIENT_JSON=$(curl -sf "${KEYCLOAK_URL}/admin/realms/${REALM}/clients/${CLIENT_UUID}" \
     -H "Authorization: Bearer ${TOKEN}")
 
-  # Redirect URIs und Web Origins zusammenführen (bestehende + neue, dedupliziert)
+  # Redirect URIs, Web Origins, Root URL und Admin URL aktualisieren
   UPDATED_JSON=$(echo "$CLIENT_JSON" | python3 -c "
 import sys, json
 
 client = json.load(sys.stdin)
 new_redirects = '${NEW_REDIRECTS}'.split(',')
 new_origins = '${NEW_ORIGINS}'.split(',')
+new_root_url = '${NEW_ROOT_URL}'
+new_admin_url = '${NEW_ADMIN_URL}'
 
 # Bestehende URIs beibehalten, neue hinzufügen
 redirects = list(dict.fromkeys(client.get('redirectUris', []) + new_redirects))
 origins = list(dict.fromkeys(client.get('webOrigins', []) + new_origins))
+
+# Root URL und Admin URL setzen
+client['rootUrl'] = new_root_url
+client['adminUrl'] = new_admin_url
 
 # post.logout.redirect.uris aktualisieren (##-getrennt in Keycloak)
 attrs = client.get('attributes', {})
