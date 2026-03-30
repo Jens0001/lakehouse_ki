@@ -85,6 +85,15 @@ fi
 # --- Docker Compose starten -------------------------------------------------
 echo ""
 echo "Starte Stack..."
+
+# Keycloak muss wissen, auf welcher URL es erreichbar ist (für OIDC Discovery)
+# Falls nicht localhost, nutze EXTERNAL_HOST; sonst nutze "keycloak" (Docker-intern)
+if [ "${EXTERNAL_HOST}" = "localhost" ]; then
+  export KEYCLOAK_HOSTNAME="keycloak"
+else
+  export KEYCLOAK_HOSTNAME="${EXTERNAL_HOST}"
+fi
+
 if [ -n "$BUILD_FLAG" ]; then
   echo "  (mit Docker Image Rebuild)"
   docker compose up -d --build
