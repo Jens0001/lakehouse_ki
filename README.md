@@ -331,7 +331,7 @@ from airflow.operators.bash import BashOperator
 with DAG(
     'my_etl_dag',
     start_date=datetime(2026, 1, 1),
-    schedule_interval='@daily'
+    schedule='@daily'
 ) as dag:
     task = BashOperator(
         task_id='my_task',

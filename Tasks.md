@@ -22,11 +22,12 @@
   - Empfohlene Datasets:
     - Tracks: https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset
     - Charts: https://www.kaggle.com/datasets/dhruvildave/spotify-charts
-- [ ] **Spotify Developer App erstellen** → Client ID + Client Secret
+- [x] **Spotify Developer App erstellen** → Client ID + Client Secret (27.03.2026)
   - https://developer.spotify.com/dashboard → App erstellen → Client Credentials notieren
-- [ ] **Airflow Variables setzen** (Airflow UI → Admin → Variables):
-  - `SPOTIFY_CLIENT_ID` = (Spotify App Client ID)
-  - `SPOTIFY_CLIENT_SECRET` = (Spotify App Client Secret)
+  - ✅ API-Verbindung getestet: Token-Generierung + Artist-Suche funktioniert
+- [x] **Airflow Variables setzen** (27.03.2026):
+  - `SPOTIFY_CLIENT_ID` = ✅ gespeichert
+  - `SPOTIFY_CLIENT_SECRET` = ✅ verschlüsselt gespeichert
 
 #### Bulk-Load (einmalig)
 - [ ] **DAG `spotify_initial_load` triggern** – Lädt Tracks + Charts CSVs → iceberg.raw

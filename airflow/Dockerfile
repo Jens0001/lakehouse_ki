@@ -31,7 +31,9 @@ RUN pip install --no-cache-dir \
     "dbt-core==1.10.9" \
     "dbt-trino==1.10.1" \
     duckdb \
+    kaggle \
     pandas \
+    pyiceberg \
     requests \
     "apache-airflow-providers-trino>=6,<7" \
     "apache-airflow-providers-http>=6,<7" \
