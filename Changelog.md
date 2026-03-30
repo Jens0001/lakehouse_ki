@@ -11,6 +11,7 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
   - Flexible Parameter-Verarbeitung: `./start.sh [IP] [--build]` (Reihenfolge egal)
   - Optionales `--build` Flag (Default: schneller Restart ohne Image-Rebuild)
   - Automatische Berechtigungen: `find ./airflow/dags -not -path '*/__pycache__/*' -exec chmod 777 {} +` + Logs (schließt `__pycache__` aus, keine Permission-Fehler)
+  - **Neue Funktion**: Überprüft `AIRFLOW_FERNET_KEY` + generiert neuen wenn fehlend/ungültig (via `cryptography.Fernet.generate_key()`)
   - Setzt dynamische Umgebungsvariablen:
     - `KEYCLOAK_HOSTNAME`: bei localhost → "keycloak" (Docker-intern), sonst `${EXTERNAL_HOST}`
     - `KEYCLOAK_URL`: bei localhost → "http://keycloak:8082", sonst `http://${EXTERNAL_HOST}:8082`

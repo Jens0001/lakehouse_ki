@@ -100,6 +100,54 @@ if [ -d "./airflow/logs" ]; then
 fi
 
 echo ""
+echo "Überprüfe Airflow Fernet Key..."
+
+# Airflow braucht einen gültigen Fernet Key für Encryption
+# Generiere einen neuen, wenn:
+# - Key nicht vorhanden
+# - Key ist ein Dummy (CHANGE_ME, TODO, leer)
+# - Key hat falsche Länge (sollte ~44 Base64-Zeichen sein)
+
+FERNET_KEY=$(grep '^AIRFLOW_FERNET_KEY=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ')
+
+is_valid_fernet() {
+  local key="$1"
+  # Prüfe: nicht leer, nicht Dummy, richtige Länge (Fernet Keys sind ~44 Zeichen Base64)
+  if [ -z "$key" ] || [[ "$key" =~ ^(CHANGE_ME|TODO) ]]; then
+    return 1
+  fi
+  # Basis-Check: sollte min. 40 Zeichen sein
+  if [ ${#key} -lt 40 ]; then
+    return 1
+  fi
+  return 0
+}
+
+if ! is_valid_fernet "$FERNET_KEY"; then
+  echo "  ⚠️  Airflow Fernet Key ungültig oder fehlt, generiere neuen..."
+  NEW_FERNET_KEY=$(python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" 2>/dev/null)
+  if [ -z "$NEW_FERNET_KEY" ]; then
+    echo "  ❌ Konnte Fernet Key nicht generieren. Installiere: pip install cryptography"
+    exit 1
+  fi
+
+  # Aktualisiere oder füge hinzu
+  if grep -q '^AIRFLOW_FERNET_KEY=' "$ENV_FILE"; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+      sed -i '' "s|^AIRFLOW_FERNET_KEY=.*|AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}|" "$ENV_FILE"
+    else
+      sed -i "s|^AIRFLOW_FERNET_KEY=.*|AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}|" "$ENV_FILE"
+    fi
+    echo "  ✓ Airflow Fernet Key aktualisiert"
+  else
+    echo "AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}" >> "$ENV_FILE"
+    echo "  ✓ Airflow Fernet Key zu .env hinzugefügt"
+  fi
+else
+  echo "  ✓ Airflow Fernet Key ist gültig"
+fi
+
+echo ""
 echo "Aktualisiere Service-Konfigurationen..."
 
 # Trino muss die richtige externe Keycloak-URL kennen (BEVOR Container starten!)
