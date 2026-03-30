@@ -111,6 +111,8 @@ services:
       # Airflow 3.x: FAB Auth Manager aktivieren (ersetzt SimpleAuthManager),
       # damit webserver_config.py mit AUTH_TYPE=AUTH_OAUTH greift → Keycloak-Button
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+      # Development: DAG-Parser reload schneller (default: 30s) → schnelle Iteration ohne Restart
+      - AIRFLOW__SCHEDULER__DAG_FILE_PROCESSOR_INTERVAL=5
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8082}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
@@ -125,6 +127,9 @@ services:
       - AIRFLOW_VAR_WEATHER_LONGITUDE=${WEATHER_LONGITUDE}
       - AIRFLOW_VAR_WEATHER_LOCATION_KEY=${WEATHER_LOCATION_KEY}
       - AIRFLOW_VAR_ENERGY_CHARTS_BIDDING_ZONE=${ENERGY_CHARTS_BIDDING_ZONE}
+      # Kaggle API Credentials (für spotify_kaggle_download DAG)
+      - AIRFLOW_VAR_KAGGLE_USERNAME=${KAGGLE_USERNAME}
+      - AIRFLOW_VAR_KAGGLE_API_KEY=${KAGGLE_API_KEY}
     # Airflow 3.x All-in-One Startup:
     # 1. DB migrieren (idempotent)
     # 2. Admin-User anlegen via FAB Security Manager (Airflow 3.x hat kein 'airflow users create')

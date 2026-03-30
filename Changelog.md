@@ -11,6 +11,16 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
   - **Andere Schemas** (`data_vault`, `business_vault`, `marts`): Default-Werte (7 Tage Retention)
   - Reason: `raw` enthält Rohdaten mit häufigen Ladevorgängen → aggressivere Bereinigung sinnvoll
 
+### Kaggle API Integration (30.03.2026)
+
+- **`.env.example` ergänzt**: Kaggle-Variablen als Dummy-Werte hinzugefügt
+  - `KAGGLE_USERNAME=YOUR_KAGGLE_USERNAME`
+  - `KAGGLE_API_KEY=KGAT_YOUR_API_TOKEN_HERE`
+  - Mit Anleitung: README.md → "🎵 Kaggle API Setup"
+- **docker-compose.yml**: `AIRFLOW_VAR_KAGGLE_*` nutzen `.env` Variablen (kein Hardcoding)
+- **start.sh**: Kaggle-Code entfernt (Sicherheit: keine hardcodierten Secrets im Script)
+- **Sicherheit**: `.env` ist in `.gitignore`, wird nicht committed → API-Keys bleiben lokal
+
 ### Stack-Konfiguration: Automatisierung & Remote-Zugriff (30.03.2026)
 
 - **Startskript neu geschrieben**: `start.sh`

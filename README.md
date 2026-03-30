@@ -187,6 +187,43 @@ Dieser User kann sich an MinIO, Trino und Airflow via SSO anmelden.
 5. Vergeben Sie Passwort und aktivieren Sie "Temporary = OFF"
 6. Der Benutzer kann sich nun an allen SSO-fähigen Services anmelden
 
+## 🎵 Kaggle API Setup (Spotify-Daten)
+
+Der `spotify_kaggle_download` DAG lädt Spotify-Datensätze von Kaggle herunter. Dafür benötigt ihr einen kostenlosen Kaggle API-Key.
+
+### API-Key generieren
+
+1. **Kaggle-Konto erstellen** (falls noch nicht vorhanden):
+   - https://www.kaggle.com (mit Google/Email registrieren)
+
+2. **API-Token generieren**:
+   - Einloggen auf https://www.kaggle.com
+   - Gehen Sie zu **Settings** → **API** (oder https://www.kaggle.com/settings/account)
+   - Klicken Sie auf **"Create New API Token"**
+   - Eine `kaggle.json` Datei wird heruntergeladen
+   - Öffnen Sie die Datei mit einem Texteditor – darin finden Sie:
+     ```json
+     {"username":"<dein_username>","key":"KGAT_..."}
+     ```
+
+3. **Credentials in `.env` eintragen** (optional):
+   ```bash
+   KAGGLE_USERNAME=<dein_username>
+   KAGGLE_API_KEY=KGAT_...
+   ```
+
+   Alternativ: `start.sh` setzt die Werte automatisch beim Start.
+
+4. **DAG triggern**:
+   - Airflow UI → DAGs → `spotify_kaggle_download` → "Trigger DAG"
+   - Der DAG lädt die CSV-Dateien von Kaggle und speichert sie in MinIO
+   - Anschließend triggert `spotify_initial_load` den Bulk-Load in Iceberg raw-Schema
+
+### Datensätze
+
+- **Spotify Tracks**: https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset
+- **Spotify Charts**: https://www.kaggle.com/datasets/dhruvildave/spotify-charts
+
 ## 📁 Projektstruktur
 
 ```
