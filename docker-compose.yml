@@ -277,8 +277,15 @@ services:
       - DB_USER=${OPENMETADATA_DB_USER:-openmetadata_user}
       - DB_USER_PASSWORD=${OPENMETADATA_DB_PASSWORD}
       - OM_DATABASE=openmetadata_db
+      # Elasticsearch-Konfiguration (muss für Migrations verfügbar sein)
+      - SEARCH_TYPE=elasticsearch
+      - ELASTICSEARCH_HOST=openmetadata-es
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
     depends_on:
       openmetadata-db:
+        condition: service_healthy
+      openmetadata-es:
         condition: service_healthy
     networks:
       - lakehouse_network
