@@ -99,8 +99,10 @@ echo "Starte Stack..."
 # Falls nicht localhost, nutze EXTERNAL_HOST; sonst nutze "keycloak" (Docker-intern)
 if [ "${EXTERNAL_HOST}" = "localhost" ]; then
   export KEYCLOAK_HOSTNAME="keycloak"
+  export KEYCLOAK_URL="http://keycloak:8082"
 else
   export KEYCLOAK_HOSTNAME="${EXTERNAL_HOST}"
+  export KEYCLOAK_URL="http://${EXTERNAL_HOST}:8082"
 fi
 
 if [ -n "$BUILD_FLAG" ]; then

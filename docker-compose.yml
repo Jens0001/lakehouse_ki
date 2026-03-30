@@ -109,7 +109,7 @@ services:
       # Airflow 3.x: FAB Auth Manager aktivieren (ersetzt SimpleAuthManager),
       # damit webserver_config.py mit AUTH_TYPE=AUTH_OAUTH greift → Keycloak-Button
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
-      - KEYCLOAK_URL=http://keycloak:8082
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8082}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
       - KEYCLOAK_CLIENT_SECRET_AIRFLOW=${KEYCLOAK_CLIENT_SECRET_AIRFLOW}
