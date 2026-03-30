@@ -23,6 +23,7 @@ AUTH_ROLES_MAPPING = {
     'viewer': ['Viewer'],
     'user': ['User'],
     'op': ['Op'],
+    'default-roles-lakehouse': ['User'],
 }
 AUTH_ROLES_SYNC_AT_LOGIN = True
 
@@ -40,6 +41,8 @@ OAUTH_PROVIDERS = [
             'access_token_url': f'{KEYCLOAK_OPENID}/token',
             'authorize_url': f'{KEYCLOAK_OPENID}/auth',
             'server_metadata_url': f'{KEYCLOAK_BASE}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration',
+            'access_token_method': 'POST',
+            'request_token_url': None,
         },
     },
 ]
