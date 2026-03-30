@@ -98,8 +98,9 @@ services:
       - ./dbt:/opt/dbt
       # JDBC Treiber: Oracle (ojdbc11) und IBM DB2 (db2jcc) – read-only gemountet
       - ./jdbc_drivers:/opt/jdbc_drivers:ro
-      # User-Init-Script: Airflow 3.x hat kein 'airflow users create' CLI mehr
+      # Init-Scripts: User-Erstellung + Connections (Airflow 3.x hat kein 'airflow users create' CLI mehr)
       - ./scripts/airflow_init_users.py:/opt/airflow/scripts/airflow_init_users.py:ro
+      - ./scripts/airflow_init_connections.py:/opt/airflow/scripts/airflow_init_connections.py:ro
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags

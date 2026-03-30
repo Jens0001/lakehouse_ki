@@ -91,12 +91,12 @@ echo "Überprüfe und repariere Berechtigungen..."
 # __pycache__ wird ausgeschlossen (vom Container erstellt, nicht änderbar vom Host)
 if [ -d "./airflow/dags" ]; then
   find ./airflow/dags -not -path '*/__pycache__/*' -exec chmod 777 {} + 2>/dev/null || true
-  echo "  ✓ ./airflow/dags: Berechtigungen auf 777 gesetzt (ausgeführt: __pycache__)"
+  echo "  ✓ ./airflow/dags: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__)"
 fi
 
 if [ -d "./airflow/logs" ]; then
   find ./airflow/logs -not -path '*/__pycache__/*' -exec chmod 777 {} + 2>/dev/null || true
-  echo "  ✓ ./airflow/logs: Berechtigungen auf 777 gesetzt (ausgeführt: __pycache__)"
+  echo "  ✓ ./airflow/logs: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__)"
 fi
 
 echo ""

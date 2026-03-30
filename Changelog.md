@@ -54,6 +54,7 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
   - Behebt "unauthorized_client" und "invalid_client_credentials"-Fehler
 
 - **docker-compose.yml Anpassungen**:
+  - Airflow Volumes: `./scripts/airflow_init_connections.py` gemountet (war vorher vergessen)
   - Airflow Command: `airflow_init_users.py` → `airflow_init_users.py` + `airflow_init_connections.py`
   - Airflow Umgebungsvariablen:
     - `KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8082}` (dynamisch, mit Fallback)
