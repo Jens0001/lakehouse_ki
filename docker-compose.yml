@@ -252,6 +252,7 @@ services:
       - POSTGRES_DB=openmetadata_db
     volumes:
       - openmetadata_db_data:/var/lib/postgresql/data
+      - ./init-scripts/openmetadata-init.sql:/docker-entrypoint-initdb.d/01-init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${OPENMETADATA_DB_USER:-openmetadata_user} -d openmetadata_db"]
       interval: 10s
@@ -259,37 +260,6 @@ services:
       retries: 5
     networks:
       - lakehouse_network
-
-  # OpenMetadata DB-Migrationen: Initialisiert die Datenbank-Schema beim ersten Start.
-  # Dieser Container läuft einmalig VOR openmetadata-server, führt die Flyway-Migrations
-  # durch und beendet sich dann. Der openmetadata-server wartet auf "service_started",
-  # bevor er selbst startet.
-  openmetadata-db-migrate:
-    image: docker.getcollate.io/openmetadata/server:latest
-    container_name: lakehouse_openmetadata_db_migrate
-    command: /opt/openmetadata/bootstrap/openmetadata-ops.sh migrate
-    environment:
-      - DB_HOST=openmetadata-db
-      - DB_PORT=5432
-      - DB_DRIVER_CLASS=org.postgresql.Driver
-      - DB_SCHEME=postgresql
-      - DB_PARAMS=
-      - DB_USER=${OPENMETADATA_DB_USER:-openmetadata_user}
-      - DB_USER_PASSWORD=${OPENMETADATA_DB_PASSWORD}
-      - OM_DATABASE=openmetadata_db
-      # Elasticsearch-Konfiguration (muss für Migrations verfügbar sein)
-      - SEARCH_TYPE=elasticsearch
-      - ELASTICSEARCH_HOST=openmetadata-es
-      - ELASTICSEARCH_PORT=9200
-      - ELASTICSEARCH_SCHEME=http
-    depends_on:
-      openmetadata-db:
-        condition: service_healthy
-      openmetadata-es:
-        condition: service_healthy
-    networks:
-      - lakehouse_network
-    restart: "no"
 
   # Elasticsearch als Such- und Indexierungsbackend für OpenMetadata.
   # OM indiziert alle Assets (Tabellen, Spalten, Pipelines, Tags) in ES –
@@ -445,8 +415,6 @@ services:
       # Ohne diese Variable generiert OM DAGs mit localhost:8585, was im Container nicht auflöst.
       - SERVER_HOST_API_URL=http://openmetadata-server:8585/api
     depends_on:
-      openmetadata-db-migrate:
-        condition: service_started
       openmetadata-db:
         condition: service_healthy
       openmetadata-es:
