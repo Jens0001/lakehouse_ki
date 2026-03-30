@@ -41,22 +41,55 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 **Merke**: Bei Data-Vault-Loads mit mehrfachen Ladevorgängen immer `GROUP BY` statt `SELECT DISTINCT` verwenden, wenn technische Felder wie `_loaded_at` enthalten sind.
 
-### OIDC/OAuth2 Remote-Zugriff – Split-DNS-Problem
+### OIDC/OAuth2 Remote-Zugriff – Split-DNS-Problem & Lösung (30.03.2026)
 
-**Problem**: Bei Zugriff auf den Stack von einem anderen Rechner (z.B. VM im LAN) scheitert OIDC/SSO, weil:
+**Problem**: Bei Zugriff auf den Stack von einem anderen Rechner (z.B. VM im LAN) scheitert OIDC/SSO wegen des klassischen **Split-DNS-Problems**:
 1. Browser-Redirects (MinIO, Airflow, Trino) auf `localhost` zeigen → Client-Browser landet auf eigenem Rechner
-2. Keycloak-Issuer-URL nutzt `keycloak` als Hostname → Browser kann das nicht auflösen
+2. Keycloak OIDC-Discovery gibt Issuer-URL mit `keycloak` Hostname zurück → Browser kann `keycloak` nicht auflösen
+3. Trino validiert Token-Issuer: Token-Claims sagen `iss=http://<IP>:8082/...`, aber Trino erwartet `iss=http://keycloak:8082/...` → Token-Validierung scheitert
 
-**Ursache**: Docker-interne Hostnamen (`keycloak`, `minio`) sind außerhalb des Docker-Netzwerks nicht auflösbar. Keycloak setzt `KC_HOSTNAME=keycloak` als festen Issuer-Hostnamen.
+**Root Cause**: Docker-interne Hostnamen (`keycloak`, `minio`) sind außerhalb des Docker-Netzwerks nicht auflösbar. Keycloak setzt `KC_HOSTNAME` als Issuer im Token. Im Container sieht das Token `keycloak:8082`, draußen sieht der Browser `localhost:8082` → Mismatch.
 
-**Lösung (EXTERNAL_HOST)**:
-- Variable `EXTERNAL_HOST` in `.env` (Default: `localhost`)
-- `start.sh` erkennt Netzwerk-IP automatisch und aktualisiert Keycloak Redirect URIs via Admin API
-- `/etc/hosts`-Eintrag `<VM-IP> keycloak` auf jedem Client-Rechner weiterhin nötig (Split-DNS)
+**Implementierte Lösung (EXTERNAL_HOST-Pattern)**:
 
-**Warum kein `KC_HOSTNAME=${EXTERNAL_HOST}`?**: Trino validiert OIDC-Token gegen `http://keycloak:8082/...` (Docker-intern). Wenn Keycloak den Issuer auf `http://<IP>:8082/...` setzt, stimmt der Issuer nicht mit Trinos Config überein → Token-Validierung scheitert. Das ist das klassische Split-DNS-Problem bei OIDC in Docker-Umgebungen.
+1. **`start.sh` Automation**:
+   - Erkennt Netzwerk-IP automatisch (Linux: `hostname -I`, macOS: `ipconfig getifaddr`)
+   - Setzt `KEYCLOAK_HOSTNAME`:
+     - Bei `localhost`: `keycloak` (Docker-intern, auch für Container)
+     - Bei IP: `${EXTERNAL_HOST}` (damit Keycloak den Issuer mit IP setzt)
+   - Setzt `KEYCLOAK_URL`:
+     - Bei `localhost`: `http://keycloak:8082` (Docker-Netzwerk)
+     - Bei IP: `http://${EXTERNAL_HOST}:8082` (für Airflow außerhalb Docker, fällt aber in Container trotzdem auf keycloak:8082 ab)
 
-**Langfristige Lösung**: Traefik Reverse Proxy + dnsmasq + eigene CA → ein DNS-Name (`keycloak.lakehouse.internal`) der sowohl von Docker als auch vom Browser aufgelöst wird.
+2. **`update-trino-config.sh`** vor Container-Start:
+   - Ersetzt in `trino/etc/config.properties`: `http://keycloak:8082` → `http://${EXTERNAL_HOST}:8082`
+   - Trino erkennt dann den Issuer mit externer IP → Token-Validierung passt
+
+3. **Keycloak Client-URLs aktualisieren** (nach Keycloak-Start):
+   - `update-keycloak-redirects.sh` setzt für alle Clients:
+     - **Redirect URIs**: `http://<IP>:<port>/oauth_callback` + localhost-Fallback
+     - **Web Origins**: `http://<IP>:<port>` (Browser CORS)
+     - **Root URL**: `http://<IP>:<port>/` (für relative Links)
+     - **Admin URL**: `http://<IP>:<port>/` (für Token-Validierung)
+
+4. **Client-seitiger `/etc/hosts`-Eintrag** (immer noch nötig):
+   - `<VM-IP> keycloak` auf jedem Client-Rechner
+   - Browser kann jetzt `keycloak` auflösen (zeigt auf VM-IP)
+   - Keycloak ist unter `http://keycloak:8082` (im Browser) erreichbar
+
+**Warum nicht einfach `KC_HOSTNAME=${EXTERNAL_HOST}`?**: Wenn Keycloak den Issuer mit IP setzt (z.B. `iss=http://192.168.1.50:8082/...`), aber im Container noch `http://keycloak:8082` hardcodiert steht, entstehen zwei verschiedene URLs für den gleichen Server → Token-Mismatch. Mit dem aktuellen Ansatz:
+- Container sehen Keycloak intern unter `http://keycloak:8082/...`
+- Browser sehen Keycloak extern unter `http://<IP>:8082/...` (via `/etc/hosts` Auflösung zu `keycloak`)
+- Der Issuer im Token wird mit der externen IP gesetzt
+- Alle Services (Trino, Airflow, MinIO) validieren gegen die externe IP
+
+**Langfristige Lösung** (nicht implementiert): Traefik Reverse Proxy + dnsmasq + DNS-Split-View → ein DNS-Name (`keycloak.lakehouse.local`) der sowohl von Docker als auch vom Browser identisch aufgelöst wird. Würde das `/etc/hosts`-Requirement eliminieren.
+
+**Keycloak Client-Secrets**:
+- Werden bei jedem Start überprüft (Setup-Skript)
+- Falls Placeholder (`CHANGE_ME_*`, `TODO_*`, `<20 Zeichen`), neue Secrets generieren
+- Secrets in `.env` speichern (für wiederholte Starts) + in Keycloak Admin API injizieren
+- Clients: `minio`, `airflow`, `trino` (separate Secrets)
 
 ### dbt generate_schema_name Macro
 
@@ -294,6 +327,129 @@ docker network inspect lakehouse_network
 environment:
   - KEYCLOAK_URL=${KEYCLOAK_URL}
   - KEYCLOAK_REALM=${KEYCLOAK_REALM}
+```
+
+---
+
+### Keycloak Client-Konfiguration Pattern (30.03.2026)
+
+**Vollständige Client-Setup-Checkliste** (alle 3 Komponenten notwendig!):
+
+1. **Client Secrets** (in `.env` + Keycloak Admin Console):
+   ```
+   KEYCLOAK_CLIENT_SECRET_<APP>=<secret>
+   ```
+   - **Länge**: mindestens 24 Zeichen (weniger werden als "placeholder" erkannt)
+   - **Generierung**: `openssl rand -base64 48` (48 Base64 = 36 Bytes Raw)
+   - **Speicherung**: `.env` ODER `docker-compose.yml` environment, aber nicht beide!
+   - **Best Practice**: In `.env` speichern, damit es nicht in `.yml` landet
+
+2. **Redirect URIs** (Keycloak Client → Settings):
+   ```
+   http://localhost:8081/oauth-authorized/keycloak      # Airflow lokal
+   http://<IP>:8081/oauth-authorized/keycloak            # Airflow remote
+   http://localhost:9001/oauth_callback                   # MinIO lokal
+   http://<IP>:9001/oauth_callback                        # MinIO remote
+   ```
+   - **Muss exakt** der Browser-URL entsprechen, auf die OAuth2 zurückleitet
+   - **Exact Matching aktivieren** in Keycloak (standardmäßig an)
+   - **Protokoll und Port** wichtig: `http://` vs `https://`, `8081` vs `443`
+   - **Wildcard nicht sicher**: `http://localhost/*` verhindert genaue CSRF-Validierung
+
+3. **Root URL + Admin URL** (nur für Browser/CORS relevant):
+   ```
+   Root URL: http://<IP>:8082/  (für relative Links in Keycloak UI)
+   Admin URL: http://<IP>:8082/admin/  (für Token-Management-Flows)
+   ```
+   - Wird von einigen Clients ignoriert, aber wichtig für vollständiges Setup
+   - **MinIO braucht Web Origins** zusätzlich: `http://localhost:9001`, `http://<IP>:9001`
+
+4. **Token Endpoint Auth Method**:
+   - **Server-to-Server** (Backend): `client_secret_basic` (Standard) oder `client_secret_post`
+   - **Browser App** (SPA): `public` (kein Secret)
+   - **Airflow (PyArrow/PySpark in Container)**: `client_secret_post` (explizit in webserver_config.py)
+
+**Häufige Fehler**:
+- ❌ "unauthorized_client": Redirect URI stimmt nicht exakt überein (Typo, falscher Port, fehlender Protokoll)
+- ❌ "invalid_client_id": Client nicht im Realm, oder Secret nicht richtig gesetzt
+- ❌ Token-Validierung schlägt fehl: Issuer URL passt nicht (Split-DNS-Problem)
+
+---
+
+### Docker Permissions & Named Volumes Pattern (30.03.2026)
+
+**Problem**: Host-User (z.B. `einwagje`) erstellt bind-mount Verzeichnisse mit `755`, Docker-Container (User `airflow`, `dremio`) können nicht schreiben.
+
+**Symptome**:
+- Airflow: "Permission denied: '/opt/airflow/logs/dag_processor'"
+- Dremio: "The path /opt/dremio/data is not writable by the current user"
+- DAG Processor: Kann nicht in `/opt/airflow/logs` schreiben
+
+**Lösungsmuster**:
+
+1. **Für kritische Verzeichnisse: Named Volumes statt Bind-Mounts**
+   ```yaml
+   volumes:
+     dremio_data:  # statt ./dremio/data
+
+   services:
+     dremio:
+       volumes:
+         - dremio_data:/opt/dremio/data  # Docker verwaltet Berechtigungen
+   ```
+   - ✅ Docker kümmert sich um Ownership (rootless oder daemon-User)
+   - ✅ Container-User kann immer schreiben
+   - ❌ Auf Host nicht direkt einsehbar (nur via `docker volume inspect`)
+
+2. **Für Development-Verzeichnisse: Automatische Permission-Fixes**
+   ```bash
+   # In start.sh, BEVOR docker compose up:
+   chmod -R 777 ./airflow/dags
+   chmod -R 777 ./airflow/logs
+   ```
+   - ✅ Transparent für Developer
+   - ✅ Funktioniert mit bind-mounts
+   - ✅ Schneller Restart möglich
+
+3. **Alternative (nicht empfohlen)**: User-Mapping in Container
+   ```dockerfile
+   # Dockerfile: Container-User mit Host-GID
+   RUN groupadd -g 1000 airflow && \
+       useradd -u 1000 -g airflow airflow
+   ```
+   - ❌ Kompliziert bei Entwicklung
+   - ❌ Funktioniert nicht über Gast-VMs hinweg
+   - ✅ Einzig saubere Lösung für Produktions-Container
+
+**Entscheidung für Lakehouse KI**: Hybrid-Ansatz
+- Named Volumes für `dremio_data` (produktiv-ähnlich)
+- `chmod 777` für `./airflow/dags` + `./airflow/logs` (Development)
+- Automatisiert in `start.sh` (transparent)
+
+---
+
+### Airflow DAG Discovery & DAG Processor (30.03.2026)
+
+**Airflow 3.x Besonderheit**: DAG-Processor ist **kein integrierter Subprocess** des Schedulers mehr, sondern ein eigenständiger Prozess (`airflow dag-processor`).
+
+**Problem**: Ohne laufenden DAG-Processor:
+- DAGs werden nie serialisiert → OpenMetadata kann keine Pipelines finden
+- Airflow UI zeigt 0 DAGs
+- DAG-Abfragen: `airflow dags list` gibt nichts zurück
+
+**Lösung**:
+- Separate Container für `airflow-dag-processor` (gleiche Volumes + Environment wie Scheduler)
+- DAG-Folder explizit setzen: `AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags`
+- DAG Folder muss lesbar + beschreibbar sein (für `.airflow_dag_parser.lock`)
+
+**Debugging**:
+```bash
+# Im Airflow-Container prüfen
+docker exec lakehouse_airflow airflow dags list
+# Sollte alle DAGs zeigen
+
+# DAG-Parser-Log prüfen
+ls -la /opt/airflow/logs/dag_processor/
 ```
 
 ---

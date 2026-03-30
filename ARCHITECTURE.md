@@ -835,3 +835,164 @@ Automatisierung: DAG `dbt_run_lakehouse_ki` in Airflow führt täglich `dbt deps
 | **Upgrade zu 3.1.8 percormance** | **Niedrig**: SLA & Architektur verbessert sich | ✅ **GEWÄHLT** |
 
 ---
+
+## 8. Startup-Automatisierung & Konfigurationsmanagement (30.03.2026)
+
+### Problem
+
+Ein manueller Start des Stacks mit Docker Compose erfordert mehrere fehlerträchtige manuelle Schritte:
+
+1. **EXTERNAL_HOST**: IP / Hostname für Remote-Zugriff manuell in `.env` setzen
+2. **Keycloak URLs**: Bei Remote-Zugriff Keycloak Config für externe URLs anpassen
+3. **Permissions**: DAG- und Logs-Verzeichnis Berechtigungen fixieren (sonst DAGs nicht sichtbar)
+4. **Trino Config**: Keycloak-URLs in `trino/etc/config.properties` aktualisieren
+5. **Keycloak Clients**: OAuth2 Redirect URIs, Root URLs für externe IPs konfigurieren
+6. **Client Secrets**: Überprüfen / generieren / injizieren in Keycloak
+7. **Airflow Connections**: Trino-Connection manuell erstellen
+
+**Folge**: Neue Entwickler / Remote-Zugriff → viele manuelle Fehlerquellen.
+
+### Entscheidung: Automatisiertes Startup-Skript + Init-Scripts
+
+```
+User:          ./start.sh [IP|--build]
+                     ↓
+start.sh:      Erkennt IP automatisch (oder nimmt Parameter)
+               Setzt EXTERNAL_HOST in .env
+               Setzt dynamische Umgebungsvariablen (KEYCLOAK_HOSTNAME, KEYCLOAK_URL)
+               Fixiert Berechtigungen (chmod 777 airflow/dags, airflow/logs)
+               Ruft update-trino-config.sh auf (Keycloak-URLs in Trino-Config)
+                     ↓
+docker compose up: Startet alle Services
+                   Airflow führt scripts/airflow_init_users.py + scripts/airflow_init_connections.py aus
+                     ↓
+start.sh:      Wartet auf Keycloak Health-Check (Port 9000)
+               Ruft setup-keycloak-secrets.sh auf (Secret-Validierung + Keycloak Injection)
+               Ruft update-keycloak-redirects.sh auf (Redirect URIs, Root URLs aktualisieren)
+                     ↓
+Stack ready:   Alle Services laufen, Keycloak konfiguriert, OAuth2 funktioniert
+```
+
+### Implementierung
+
+#### `start.sh` – Main Orchestrator
+
+**Features**:
+- **Automatische IP-Erkennung**: `hostname -I` (Linux), `ipconfig getifaddr` (macOS)
+- **Flexible Parametrisierung**: `./start.sh [IP|localhost] [--build]`
+- **Fehlertoleranz**: Prüft auf Berechtigungen, .env-Existenz bevor Container starten
+- **Health-Checks**: Wartet auf Keycloak Readiness-Probe (max. 120s, 5s-Intervalle)
+- **Ausgabe**: Service-URLs am Ende für schnelle Navigation
+
+**Besonderheiten**:
+```bash
+# Dynamische Umgebungsvariablen (statt hardcoded docker-compose.yml):
+if [ "${EXTERNAL_HOST}" = "localhost" ]; then
+  export KEYCLOAK_HOSTNAME="keycloak"  # Container-intern
+  export KEYCLOAK_URL="http://keycloak:8082"
+else
+  export KEYCLOAK_HOSTNAME="${EXTERNAL_HOST}"  # Für OIDC Issuer
+  export KEYCLOAK_URL="http://${EXTERNAL_HOST}:8082"  # Für Services außerhalb Docker
+fi
+
+docker compose up -d $BUILD_FLAG
+```
+
+#### `init-scripts/update-trino-config.sh` – Trino-Config Anpassung
+
+**Was**: Ersetzt Docker-interne Keycloak-URLs mit externen IPs in `trino/etc/config.properties`
+
+**Warum**: Trino validiert OIDC Token-Issuer. Wenn Keycloak intern `keycloak:8082` sagt, aber Token Issuer = `<IP>:8082` hat, schlägt Validierung fehl.
+
+**Wann**: VOR `docker compose up` (damit Trino beim Start die richtige Config hat)
+
+**Implementation**:
+```bash
+sed -i.bak "s|http://keycloak:8082|http://${EXTERNAL_HOST}:8082|g" "$TRINO_CONFIG"
+```
+
+#### `init-scripts/setup-keycloak-secrets.sh` – Secret Management
+
+**Was**: Überprüft Keycloak Client Secrets, generiert neue falls nötig, speichert in `.env` + Keycloak.
+
+**Pattern**:
+1. Liest Secret aus `.env`: `KEYCLOAK_CLIENT_SECRET_<CLIENT>`
+2. Prüft ob gültig (Länge ≥ 20, kein Placeholder wie `CHANGE_ME_*`, `TODO_*`)
+3. Wenn ungültig: Generiert mit `openssl rand -base64 48`
+4. Speichert in `.env` (für wiederholten Start)
+5. Injiziert in Keycloak Admin API: `PUT /realms/{realm}/clients/{client-uuid}` + `secret`
+
+**Clients**: `minio`, `airflow`, `trino` (separate Secrets)
+
+**Idempotent**: Mehrfaches Ausführen ändert nichts wenn Secrets bereits gültig sind.
+
+#### `init-scripts/update-keycloak-redirects.sh` – Client-URL Konfiguration
+
+**Was**: Aktualisiert Keycloak Client-Einstellungen für externe Host-Namen.
+
+**Welche URLs**:
+- **Redirect URIs**: `http://<IP>:<port>/oauth_callback` (für OAuth2 Return)
+- **Web Origins**: `http://<IP>:<port>` (für CORS)
+- **Root URL**: `http://<IP>:<port>/` (für relative Links)
+- **Admin URL**: `http://<IP>:<port>/` (für Client-Management)
+
+**Clients**: MinIO, Airflow, Trino (je nach konfig)
+
+**Implementation**: Python JSON-Manipulation, Keycloak Admin REST API
+
+#### `scripts/airflow_init_users.py` & `scripts/airflow_init_connections.py`
+
+**airflow_init_users.py**: Erstellt Default-User `admin:admin` (FAB-App-Integration in Airflow 3.x)
+
+**airflow_init_connections.py**: Erstellt `trino_default` Connection automatisch (Airflow 3.x Hat keine `airflow users create` CLI mehr)
+
+**Wann**: Während `docker compose up`, im Airflow-Container-Startup
+
+### Anforderungen
+
+**Im `docker-compose.yml`**:
+```yaml
+services:
+  airflow:
+    command: >
+      bash -c "
+        airflow db migrate &&
+        python /opt/airflow/scripts/airflow_init_users.py &&
+        python /opt/airflow/scripts/airflow_init_connections.py &&
+        airflow api-server &
+        sleep 5 &&
+        airflow scheduler &
+        airflow dag-processor
+      "
+    environment:
+      - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8082}
+      - KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME:-keycloak}
+```
+
+**Im `.env`**:
+```
+EXTERNAL_HOST=localhost  # Default, wird von start.sh überschrieben
+KEYCLOAK_URL=http://keycloak:8082  # Default, wird von start.sh überschrieben
+KEYCLOAK_HOSTNAME=keycloak  # Default
+```
+
+### Ergebnis
+
+- ✅ **Einzeiliger Start**: `./start.sh` oder `./start.sh 192.168.1.50`
+- ✅ **Keine manuellen Fehlerquellen** mehr für Permissions, URLs, Secrets
+- ✅ **Remote-Zugriff on-the-fly**: Einfach IP mitgeben, alles automatisch konfiguriert
+- ✅ **Idempotent**: Mehrfaches Ausführen ändert nur was nötig ist
+- ✅ **Transparent**: Alle Skripte loggbar, debugging möglich
+
+### Bekannte Limitierung: `/etc/hosts` Eintrag
+
+**Grund**: Split-DNS-Problem bei OIDC in Docker-Umgebungen (dokumentiert in Memory.md)
+
+**Workaround**: Jeder Client-Rechner braucht manuell:
+```bash
+echo '<EXTERNAL_HOST> keycloak' | sudo tee -a /etc/hosts
+```
+
+**Langfristige Lösung**: Traefik Reverse Proxy + DNS-Split-View (nicht implementiert, Aufwand > Nutzen für MVP)
+
+---

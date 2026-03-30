@@ -82,7 +82,22 @@ else
   echo "EXTERNAL_HOST zu .env hinzugefügt: ${EXTERNAL_HOST}"
 fi
 
-# --- Pre-Start: Konfigurationen anpassen -------------------------------------
+# --- Pre-Start: Berechtigungen und Konfigurationen anpassen -------------------
+echo ""
+echo "Überprüfe und repariere Berechtigungen..."
+
+# Airflow DAG- und Logs-Verzeichnis müssen vom airflow-User (im Container)
+# beschreibbar sein. Setze auf 777 um Permission-Probleme zu vermeiden.
+if [ -d "./airflow/dags" ]; then
+  chmod -R 777 ./airflow/dags
+  echo "  ✓ ./airflow/dags: Berechtigungen auf 777 gesetzt"
+fi
+
+if [ -d "./airflow/logs" ]; then
+  chmod -R 777 ./airflow/logs
+  echo "  ✓ ./airflow/logs: Berechtigungen auf 777 gesetzt"
+fi
+
 echo ""
 echo "Aktualisiere Service-Konfigurationen..."
 

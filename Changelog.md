@@ -4,6 +4,79 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Stack-Konfiguration: Automatisierung & Remote-Zugriff (30.03.2026)
+
+- **Startskript neu geschrieben**: `start.sh`
+  - Automatische Netzwerk-IP-Erkennung (Linux `hostname -I`, macOS `ipconfig getifaddr`)
+  - Flexible Parameter-Verarbeitung: `./start.sh [IP] [--build]` (Reihenfolge egal)
+  - Optionales `--build` Flag (Default: schneller Restart ohne Image-Rebuild)
+  - Automatische Berechtigungen: `chmod -R 777 ./airflow/dags` + `./airflow/logs` vor Container-Start
+  - Setzt dynamische Umgebungsvariablen:
+    - `KEYCLOAK_HOSTNAME`: bei localhost → "keycloak" (Docker-intern), sonst `${EXTERNAL_HOST}`
+    - `KEYCLOAK_URL`: bei localhost → "http://keycloak:8082", sonst `http://${EXTERNAL_HOST}:8082`
+  - Ruft `init-scripts/update-trino-config.sh` auf vor `docker compose up` (aktualisiert Keycloak-URLs in Trino-Config)
+  - Wartet auf Keycloak Health-Check (Port 9000) mit 5s-Intervallen (max. 120s)
+  - Triggert `init-scripts/setup-keycloak-secrets.sh` nach Keycloak-Start
+  - Aktualisiert Keycloak Redirect URIs via `init-scripts/update-keycloak-redirects.sh` (nur bei nicht-localhost)
+
+- **Keycloak Secrets Management**: `init-scripts/setup-keycloak-secrets.sh` erweitert
+  - Liest Secrets aus `.env`
+  - Erkennt Placeholder-Werte (CHANGE_ME_*, TODO_*, Länge < 20 Zeichen) mittels `is_valid_secret()`
+  - Generiert neue sichere Secrets mit `openssl rand -base64 48` wenn nötig
+  - Speichert Secrets in `.env` (für Wiederverwendung und Dokumentation)
+  - Injiziert Secrets in Keycloak Admin API (PUT /realms/{realm}/clients/{id})
+  - Clients: `minio`, `airflow`, `trino` (getrennte Secrets für jede App)
+
+- **Neues Skript**: `init-scripts/update-trino-config.sh`
+  - Ersetzt Docker-interne Keycloak-URLs mit externen IPs in `trino/etc/config.properties`
+  - Wird von `start.sh` aufgerufen BEVOR Container starten
+  - Verhindert Trino "The value of the 'issuer' claim different than Issuer URL"-Fehler
+
+- **Neues Skript**: `init-scripts/update-keycloak-redirects.sh`
+  - Aktualisiert Keycloak Client-Konfiguration via Admin API
+  - Setzt Redirect URIs, Web Origins, Root URLs, Admin URLs für externe Host-Namen
+  - Unterstützt Clients: `minio`, `airflow`, `trino`
+  - Verwendet Python für JSON-Manipulation
+  - Nur aktiv wenn `EXTERNAL_HOST != localhost`
+
+- **Airflow Connections Initialization**: `scripts/airflow_init_connections.py` (neu)
+  - Erstellt automatisch `trino_default` Connection bei Airflow-Start
+  - Config: Host=`trino`, Port=8080, Schema=`default`, Catalog=`iceberg`
+  - Wird in `docker-compose.yml` nach `airflow_init_users.py` aufgerufen
+  - Idempotent: prüft ob Connection bereits existiert
+
+- **Airflow Webserver-Konfiguration**: `airflow/webserver_config.py` angepasst
+  - OAuth2 Client-Konfiguration für Keycloak:
+    - Ergänzt: `'token_endpoint_auth_method': 'client_secret_post'` in `client_kwargs`
+    - Ergänzt: `'access_token_method': 'POST'`
+    - Ergänzt: `'request_token_url': None`
+  - Role Mapping erweitert: `'default-roles-lakehouse': ['User']` hinzugefügt
+  - Behebt "unauthorized_client" und "invalid_client_credentials"-Fehler
+
+- **docker-compose.yml Anpassungen**:
+  - Airflow Command: `airflow_init_users.py` → `airflow_init_users.py` + `airflow_init_connections.py`
+  - Airflow Umgebungsvariablen:
+    - `KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8082}` (dynamisch, mit Fallback)
+    - `AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags` (explizit gesetzt)
+  - Keycloak `KC_HOSTNAME=${KEYCLOAK_HOSTNAME:-keycloak}` (dynamisch)
+  - Dremio Volume geändert: `./dremio/data:/opt/dremio/data` → `dremio_data:/opt/dremio/data` (benannte Volume, behebt Permission-Fehler)
+  - OpenMetadata `openmetadata-db-init` Service: führt DB-Migration vor Hauptserver aus
+
+- **Dokumentation & Debugging-Hinweise**:
+  - `/etc/hosts`-Eintrag für Remote-Zugriff: `<IP> keycloak` auf allen Client-Rechnern
+  - Service-URLs nach Start: MinIO (9001), Airflow (8081), Trino (8443), Keycloak (8082), OpenMetadata (8585), Dremio (9047)
+  - Keycloak Health-Check: prüft Port 9000 (Management-Port), nicht 8082
+
+- **Gelöste Fehler**:
+  - ✅ Airflow "DAGs not found": `AIRFLOW__CORE__DAGS_FOLDER` gesetzt + Berechtigungen fixiert
+  - ✅ Airflow DAG Processor Permission Error: `chmod -R 777 ./airflow/logs` in `start.sh`
+  - ✅ Dremio "path /opt/dremio/data is not writable": benannte Volume statt bind-mount
+  - ✅ Trino "issuer claim different" OIDC-Fehler: `update-trino-config.sh` ersetzt URLs
+  - ✅ Keycloak OIDC Discovery falsche Issuer-URL: `KC_HOSTNAME` dynamisch + Redirect URIs aktualisiert
+  - ✅ Airflow OAuth2 unauthorized_client: Client Secrets, Redirect URIs, Token-Methoden konfiguriert
+  - ✅ MinIO OAuth2 Redirect-Fehler: Root URL + Admin URL in Keycloak gesetzt
+  - ✅ Airflow Trino Connection undefined: `airflow_init_connections.py` erstellt Connection automatisch
+
 ### Cognos Analytics → OpenMetadata Ingestion (25.03.2026)
 
 - **Neues Skript**: `scripts/cognos_to_openmetadata.py`

@@ -133,6 +133,7 @@ services:
       bash -c "
         airflow db migrate &&
         python /opt/airflow/scripts/airflow_init_users.py &&
+        python /opt/airflow/scripts/airflow_init_connections.py &&
         airflow api-server &
         sleep 3 && airflow scheduler &
         sleep 3 && airflow dag-processor &
