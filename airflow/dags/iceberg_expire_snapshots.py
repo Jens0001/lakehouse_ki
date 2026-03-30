@@ -48,14 +48,11 @@ def expire_all_iceberg_snapshots(**_):
     for namespace in namespaces:
         print(f"\n📂 Verarbeite Namespace: {namespace}")
 
-        # Bestimme expire_snapshots Parameter basierend auf Namespace
+        # Bestimme Policy-Notiz basierend auf Namespace
         if namespace == "raw":
-            # raw: aggressiv - 5 Minuten Retention, max. 2 Snapshots
-            expire_params = "older_than_ms => 300000, retain_last => 2"
             policy_note = "(5 Min, max 2 Snapshots)"
         else:
-            # Andere Namespaces: Default (7 Tage, min 1 Snapshot)
-            expire_params = ""
+            # Andere Namespaces: Default (7 Tage)
             policy_note = "(Default: 7 Tage)"
 
         try:
@@ -73,11 +70,13 @@ def expire_all_iceberg_snapshots(**_):
                 full_name = f"iceberg.{namespace}.{table_name}"
 
                 try:
-                    # Führe expire_snapshots mit oder ohne Parameter aus
-                    if expire_params:
-                        sql = f"ALTER TABLE {full_name} EXECUTE expire_snapshots({expire_params})"
+                    # Führe expire_snapshots via CALL auf (Trino Iceberg Syntax)
+                    if namespace == "raw":
+                        # raw: mit Parametern (5 Min, max 2 Snapshots)
+                        sql = f"CALL iceberg.system.expire_snapshots(table => '{full_name}', older_than_ms => 300000, retain_last => 2)"
                     else:
-                        sql = f"ALTER TABLE {full_name} EXECUTE expire_snapshots()"
+                        # Andere: Default (nur alte Snapshots löschen)
+                        sql = f"CALL iceberg.system.expire_snapshots(table => '{full_name}')"
 
                     hook.run(sql)
                     print(f"   ✅ {table_name} {policy_note}")
