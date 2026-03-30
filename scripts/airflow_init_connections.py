@@ -4,15 +4,17 @@ Airflow Connections Initialization Script
 
 Creates default connections needed for DAGs to run.
 Run this after Airflow DB is initialized.
+(Airflow 3.x compatible)
 """
 
 from airflow.models import Connection
-from airflow.utils.db import create_session
+from airflow.settings import engine
+from sqlalchemy.orm import Session
 
 def init_connections():
     """Create default Airflow connections"""
 
-    with create_session() as session:
+    with Session(engine) as session:
         # Trino Connection
         trino_conn = session.query(Connection).filter(
             Connection.conn_id == "trino_default"
@@ -37,5 +39,13 @@ def init_connections():
         session.commit()
 
 if __name__ == "__main__":
-    init_connections()
-    print("\nConnection initialization completed.")
+    try:
+        init_connections()
+        print("\nConnection initialization completed.")
+    except Exception as e:
+        print(f"\n❌ Error during connection initialization: {e}")
+        import traceback
+        traceback.print_exc()
+        # Don't exit with error – let Airflow continue even if connections fail
+        # (they can be created manually later)
+        exit(0)
