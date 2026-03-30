@@ -82,6 +82,15 @@ else
   echo "EXTERNAL_HOST zu .env hinzugefügt: ${EXTERNAL_HOST}"
 fi
 
+# --- Pre-Start: Konfigurationen anpassen -------------------------------------
+echo ""
+echo "Aktualisiere Service-Konfigurationen..."
+
+# Trino muss die richtige externe Keycloak-URL kennen (BEVOR Container starten!)
+if [ "${EXTERNAL_HOST}" != "localhost" ]; then
+  bash init-scripts/update-trino-config.sh "${EXTERNAL_HOST}"
+fi
+
 # --- Docker Compose starten -------------------------------------------------
 echo ""
 echo "Starte Stack..."
