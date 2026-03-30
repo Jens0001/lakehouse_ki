@@ -85,10 +85,14 @@ def expire_all_iceberg_snapshots(**_):
 
                 except Exception as e:
                     # Fehler bei einzelner Tabelle → skip und weitermachen
-                    if "does not exist" in str(e):
-                        print(f"   ⚠️  {table_name} (existiert nicht)")
+                    error_msg = str(e).lower()
+                    if "does not exist" in error_msg or "not found" in error_msg:
+                        print(f"   ⚠️  {table_name} (nicht gefunden)")
+                    elif "cannot be executed" in error_msg or "cannot execute" in error_msg:
+                        # Tabelle existiert aber expire_snapshots fehlgeschlagen (z.B. wegen Locks)
+                        print(f"   ⚠️  {table_name} (expire_snapshots nicht möglich: {type(e).__name__})")
                     else:
-                        print(f"   ⚠️  {table_name} (Fehler: {type(e).__name__})")
+                        print(f"   ⚠️  {table_name} (Fehler: {type(e).__name__}: {str(e)[:80]})")
 
         except Exception as e:
             print(f"   ❌ Fehler beim Abrufen von Tabellen: {type(e).__name__}")
