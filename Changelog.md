@@ -10,7 +10,7 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
   - Automatische Netzwerk-IP-Erkennung (Linux `hostname -I`, macOS `ipconfig getifaddr`)
   - Flexible Parameter-Verarbeitung: `./start.sh [IP] [--build]` (Reihenfolge egal)
   - Optionales `--build` Flag (Default: schneller Restart ohne Image-Rebuild)
-  - Automatische Berechtigungen: `chmod -R 777 ./airflow/dags` + `./airflow/logs` vor Container-Start
+  - Automatische Berechtigungen: `find ./airflow/dags -not -path '*/__pycache__/*' -exec chmod 777 {} +` + Logs (schließt `__pycache__` aus, keine Permission-Fehler)
   - Setzt dynamische Umgebungsvariablen:
     - `KEYCLOAK_HOSTNAME`: bei localhost → "keycloak" (Docker-intern), sonst `${EXTERNAL_HOST}`
     - `KEYCLOAK_URL`: bei localhost → "http://keycloak:8082", sonst `http://${EXTERNAL_HOST}:8082`

@@ -88,14 +88,15 @@ echo "Überprüfe und repariere Berechtigungen..."
 
 # Airflow DAG- und Logs-Verzeichnis müssen vom airflow-User (im Container)
 # beschreibbar sein. Setze auf 777 um Permission-Probleme zu vermeiden.
+# __pycache__ wird ausgeschlossen (vom Container erstellt, nicht änderbar vom Host)
 if [ -d "./airflow/dags" ]; then
-  chmod -R 777 ./airflow/dags
-  echo "  ✓ ./airflow/dags: Berechtigungen auf 777 gesetzt"
+  find ./airflow/dags -not -path '*/__pycache__/*' -exec chmod 777 {} + 2>/dev/null || true
+  echo "  ✓ ./airflow/dags: Berechtigungen auf 777 gesetzt (ausgeführt: __pycache__)"
 fi
 
 if [ -d "./airflow/logs" ]; then
-  chmod -R 777 ./airflow/logs
-  echo "  ✓ ./airflow/logs: Berechtigungen auf 777 gesetzt"
+  find ./airflow/logs -not -path '*/__pycache__/*' -exec chmod 777 {} + 2>/dev/null || true
+  echo "  ✓ ./airflow/logs: Berechtigungen auf 777 gesetzt (ausgeführt: __pycache__)"
 fi
 
 echo ""
