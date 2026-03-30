@@ -37,12 +37,16 @@ OAUTH_PROVIDERS = [
             'client_id': os.getenv('KEYCLOAK_CLIENT_ID_AIRFLOW', 'airflow'),
             'client_secret': os.getenv('KEYCLOAK_CLIENT_SECRET_AIRFLOW', ''),
             'api_base_url': f'{KEYCLOAK_OPENID}',
-            'client_kwargs': {'scope': 'openid email profile'},
+            'client_kwargs': {
+              'scope': 'openid email profile',
+              'token_endpoint_auth_method': 'client_secret_post',
+            },
             'access_token_url': f'{KEYCLOAK_OPENID}/token',
             'authorize_url': f'{KEYCLOAK_OPENID}/auth',
             'server_metadata_url': f'{KEYCLOAK_BASE}/realms/{KEYCLOAK_REALM}/.well-known/openid-configuration',
             'access_token_method': 'POST',
             'request_token_url': None,
+            'token_endpoint_auth_method': 'client_secret_post', 
         },
     },
 ]

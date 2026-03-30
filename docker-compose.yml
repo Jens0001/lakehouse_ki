@@ -102,6 +102,7 @@ services:
       - ./scripts/airflow_init_users.py:/opt/airflow/scripts/airflow_init_users.py:ro
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow123@postgres:5432/airflow
       # JDBC CLASSPATH: JayDeBeApi findet die Treiber-JARs über diesen Pfad
       - CLASSPATH=/opt/jdbc_drivers/ojdbc11.jar:/opt/jdbc_drivers/db2jcc.jar
