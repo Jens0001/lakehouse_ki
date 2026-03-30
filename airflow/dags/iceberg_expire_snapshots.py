@@ -32,6 +32,10 @@ def expire_all_iceberg_snapshots(**_):
 
     Iteriert durch alle Namespaces (raw, data_vault, business_vault, marts)
     und führt EXECUTE expire_snapshots() auf jeder Tabelle aus.
+
+    Retention Policy:
+    - raw: 5 Minuten, max. 2 Snapshots
+    - andere: Default-Werte (7 Tage, min. 1 Snapshot)
     """
     hook = TrinoHook(trino_conn_id="trino_default")
 
@@ -43,6 +47,16 @@ def expire_all_iceberg_snapshots(**_):
 
     for namespace in namespaces:
         print(f"\n📂 Verarbeite Namespace: {namespace}")
+
+        # Bestimme expire_snapshots Parameter basierend auf Namespace
+        if namespace == "raw":
+            # raw: aggressiv - 5 Minuten Retention, max. 2 Snapshots
+            expire_params = "older_than_ms => 300000, retain_last => 2"
+            policy_note = "(5 Min, max 2 Snapshots)"
+        else:
+            # Andere Namespaces: Default (7 Tage, min 1 Snapshot)
+            expire_params = ""
+            policy_note = "(Default: 7 Tage)"
 
         try:
             # Alle Tabellen im Namespace auflisten
@@ -59,9 +73,14 @@ def expire_all_iceberg_snapshots(**_):
                 full_name = f"iceberg.{namespace}.{table_name}"
 
                 try:
-                    # Führe expire_snapshots aus
-                    hook.run(f"ALTER TABLE {full_name} EXECUTE expire_snapshots()")
-                    print(f"   ✅ {table_name}")
+                    # Führe expire_snapshots mit oder ohne Parameter aus
+                    if expire_params:
+                        sql = f"ALTER TABLE {full_name} EXECUTE expire_snapshots({expire_params})"
+                    else:
+                        sql = f"ALTER TABLE {full_name} EXECUTE expire_snapshots()"
+
+                    hook.run(sql)
+                    print(f"   ✅ {table_name} {policy_note}")
                     total_expired += 1
 
                 except Exception as e:

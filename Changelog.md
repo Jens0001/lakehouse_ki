@@ -4,6 +4,13 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Iceberg Snapshot Expiration Policy Update (30.03.2026)
+
+- **DAG `iceberg_expire_snapshots.py` angepasst**:
+  - **`raw` Schema**: Snapshots nach 5 Minuten löschen, maximal 2 Snapshots vorhalten
+  - **Andere Schemas** (`data_vault`, `business_vault`, `marts`): Default-Werte (7 Tage Retention)
+  - Reason: `raw` enthält Rohdaten mit häufigen Ladevorgängen → aggressivere Bereinigung sinnvoll
+
 ### Stack-Konfiguration: Automatisierung & Remote-Zugriff (30.03.2026)
 
 - **Startskript neu geschrieben**: `start.sh`
@@ -42,9 +49,10 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 - **Airflow Connections Initialization**: `scripts/airflow_init_connections.py` (neu)
   - Erstellt automatisch `trino_default` Connection bei Airflow-Start
-  - Config: Host=`trino`, Port=8080, Schema=`default`, Catalog=`iceberg`
+  - Config: Host=`trino`, Port=8080, User=`trino_user` (kein Passwort), Schema=`default`, Catalog=`iceberg`
   - Wird in `docker-compose.yml` nach `airflow_init_users.py` aufgerufen
   - Idempotent: prüft ob Connection bereits existiert
+  - **Authentifizierung**: Trino akzeptiert Username ohne Passwort für lokale/Development-Zugriffe
 
 - **Airflow Webserver-Konfiguration**: `airflow/webserver_config.py` angepasst
   - OAuth2 Client-Konfiguration für Keycloak:

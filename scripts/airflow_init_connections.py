@@ -25,6 +25,7 @@ def init_connections():
                 conn_id="trino_default",
                 conn_type="trino",
                 host="trino",
+                login="trino_user",
                 port=8080,
                 schema="default",  # Default schema
                 extra={

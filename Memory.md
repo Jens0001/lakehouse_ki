@@ -428,6 +428,32 @@ environment:
 
 ---
 
+### Trino Authentication in Airflow (30.03.2026)
+
+**Problem**: Trino ist mit Keycloak OIDC konfiguriert (für Browser/BI-Tools), aber TrinoHook in Airflow kann nicht mit OIDC authentifizieren.
+
+**Lösung**: Username ohne Passwort in der Airflow Trino-Connection.
+- Trino akzeptiert `login="trino_user"` (kein password-Feld) für Basic Auth
+- Trino kennt `trino_user` als Default-User und akzeptiert die Authentifizierung
+- Funktioniert sowohl lokal als auch in der VM
+
+**Konfiguration in `scripts/airflow_init_connections.py`**:
+```python
+Connection(
+    conn_id="trino_default",
+    conn_type="trino",
+    host="trino",
+    login="trino_user",  # Username, kein password nötig
+    port=8080,
+    schema="default",
+    extra={"catalog": "iceberg"}
+)
+```
+
+**Production-Upgrade**: Für echte Umgebungen könnte man einen Service-Account in Keycloak anlegen oder Trino mit LDAP/AD konfigurieren.
+
+---
+
 ### Airflow DAG Discovery & DAG Processor (30.03.2026)
 
 **Airflow 3.x Besonderheit**: DAG-Processor ist **kein integrierter Subprocess** des Schedulers mehr, sondern ein eigenständiger Prozess (`airflow dag-processor`).
