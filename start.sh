@@ -93,21 +93,31 @@ else
   docker compose up -d
 fi
 
-# --- Keycloak Redirect URIs aktualisieren ------------------------------------
-if [ "${EXTERNAL_HOST}" != "localhost" ]; then
-  echo ""
-  echo "Warte auf Keycloak Health..."
-  # Max 120s warten
-  for i in $(seq 1 24); do
-    if docker exec lakehouse_keycloak bash -c "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && timeout 2 cat <&3 | grep -q '200 OK'" 2>/dev/null; then
-      echo "Keycloak ist bereit."
-      echo "Aktualisiere Keycloak Redirect URIs für ${EXTERNAL_HOST}..."
-      bash init-scripts/update-keycloak-redirects.sh "${EXTERNAL_HOST}"
-      break
-    fi
-    echo "  Warte... ($((i*5))s)"
-    sleep 5
-  done
+# --- Keycloak Konfigurationen nach Start aktualisieren -------------------------
+echo ""
+echo "Warte auf Keycloak Health..."
+# Max 120s warten
+KEYCLOAK_READY=false
+for i in $(seq 1 24); do
+  if docker exec lakehouse_keycloak bash -c "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && timeout 2 cat <&3 | grep -q '200 OK'" 2>/dev/null; then
+    echo "Keycloak ist bereit."
+    KEYCLOAK_READY=true
+    break
+  fi
+  echo "  Warte... ($((i*5))s)"
+  sleep 5
+done
+
+if [ "$KEYCLOAK_READY" = true ]; then
+  # Secrets aus .env injizieren (immer, auch bei localhost)
+  echo "Injiziere Keycloak Client Secrets..."
+  bash init-scripts/setup-keycloak-secrets.sh
+
+  # Redirect URIs aktualisieren (nur bei nicht-localhost)
+  if [ "${EXTERNAL_HOST}" != "localhost" ]; then
+    echo "Aktualisiere Keycloak Redirect URIs für ${EXTERNAL_HOST}..."
+    bash init-scripts/update-keycloak-redirects.sh "${EXTERNAL_HOST}"
+  fi
 fi
 
 # --- Hinweise ----------------------------------------------------------------
