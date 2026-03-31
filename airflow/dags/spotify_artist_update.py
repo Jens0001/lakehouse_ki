@@ -213,9 +213,9 @@ def fetch_and_store_artists(**context):
         else:
             skipped += 1
 
-        # Kurze Pause zwischen Requests um Rate Limits zu vermeiden (ca. 80/min)
-        if (i + 1) % 50 == 0:
-            print(f"  ... {i + 1}/{len(artist_names)} Artists abgefragt")
+        # Progress-Log alle 10 Artists + kurze Pause um Rate Limits zu vermeiden (ca. 80/min)
+        if (i + 1) % 10 == 0:
+            print(f"  ... {i + 1}/{len(artist_names)} Artists abgefragt ({len(results)} gefunden, {skipped} übersprungen)")
             time.sleep(1)
 
     print(f"✅ {len(results)} Artists von Spotify geholt, {skipped} übersprungen")

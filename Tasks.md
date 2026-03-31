@@ -247,6 +247,19 @@
   - [ ] **Keycloak-OIDC** für OM aktivieren *(optional)*: Anleitung in Memory.md
 
 - [ ] **End-to-End Lineage validieren** *(lückenlose Kette sicherstellen)*
+
+---
+
+### Infrastruktur & Konfiguration
+
+- [ ] **Nessie Catalog – OIDC Konfiguration**
+  - **Problem**: Nessie versucht sich mit OIDC zu verbinden, aber ist noch nicht konfiguriert
+  - **Log-Fehler**: `WARN OIDC Server is not available:: Connection refused: /127.255.0.0:0`
+  - **Umsetzung**: OIDC mit Keycloak in `docker-compose.yml` Nessie-Service aktivieren
+    - `QUARKUS_OIDC_PROVIDER_NAME` setzen
+    - `QUARKUS_OIDC_CLIENT_ID` und `QUARKUS_OIDC_CLIENT_SECRET` aus Keycloak
+    - `KEYCLOAK_URL` referenzieren
+  - **Validierung**: Nessie-Logs sollten keine OIDC-Warnings mehr enthalten
   - [ ] API → Airflow DAG: Open-Meteo als Upstream-Quelle im Katalog sichtbar
   - [ ] Airflow DAG → `iceberg.raw.weather_hourly`: OpenLineage-Event empfangen + Dataset verlinkt
   - [ ] `iceberg.raw` → `stg_weather`: dbt-Lineage aus manifest.json importiert
