@@ -161,9 +161,9 @@ def load_tracks_to_raw(**_):
         )
         WITH (
             format = 'PARQUET',
-            write.metadata.previous-versions-max = 2,
-            history.expire.min-snaps-to-keep = 1,
-            history.expire.max-snapshot-age-ms = 300000
+            "write.metadata.previous-versions-max" = 2,
+            "history.expire.min-snaps-to-keep" = 1,
+            "history.expire.max-snapshot-age-ms" = 300000
         )
     """)
 
@@ -262,9 +262,9 @@ def load_charts_to_raw(**_):
         WITH (
             format       = 'PARQUET',
             partitioning = ARRAY['region'],
-            write.metadata.previous-versions-max = 2,
-            history.expire.min-snaps-to-keep = 1,
-            history.expire.max-snapshot-age-ms = 300000
+            "write.metadata.previous-versions-max" = 2,
+            "history.expire.min-snaps-to-keep" = 1,
+            "history.expire.max-snapshot-age-ms" = 300000
         )
     """)
 
