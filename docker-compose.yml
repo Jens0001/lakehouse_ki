@@ -57,7 +57,7 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID_TRINO}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET_TRINO}
-     ä - JAVA_TOOL_OPTIONS=-Dlog.level=WARN
+     # - JAVA_TOOL_OPTIONS=-Dlog.level=WARN
     volumes:
       - ./trino/etc:/etc/trino
     depends_on:
