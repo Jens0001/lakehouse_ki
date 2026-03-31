@@ -99,6 +99,11 @@ if [ -d "./airflow/logs" ]; then
   echo "  ✓ ./airflow/logs: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__)"
 fi
 
+if [ -d "./dbt" ]; then
+  sudo find ./dbt -not -path '*/__pycache__/*' -not -path '*/target/*' -exec chmod 777 {} + 2>/dev/null || true
+  echo "  ✓ ./dbt: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__ und target/)"
+fi
+
 echo ""
 echo "Überprüfe Airflow Fernet Key..."
 
