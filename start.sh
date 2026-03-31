@@ -86,6 +86,9 @@ fi
 echo ""
 echo "Überprüfe und repariere Berechtigungen..."
 
+-exec mkdir ./airflow/logs 2>/dev/null || true
+-exec mkdir ./dbt/target 2>/dev/null || true
+
 # Airflow DAG- und Logs-Verzeichnis müssen vom airflow-User (im Container)
 # beschreibbar sein. Setze auf 777 um Permission-Probleme zu vermeiden.
 # __pycache__ wird ausgeschlossen (vom Container erstellt, nicht änderbar vom Host)
@@ -100,8 +103,8 @@ if [ -d "./airflow/logs" ]; then
 fi
 
 if [ -d "./dbt" ]; then
-  sudo find ./dbt -not -path '*/__pycache__/*' -not -path '*/target/*' -exec chmod 777 {} + 2>/dev/null || true
-  echo "  ✓ ./dbt: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__ und target/)"
+  sudo find ./dbt -not -path '*/__pycache__/*' -exec chmod 777 {} + 2>/dev/null || true
+  echo "  ✓ ./dbt: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__)"
 fi
 
 echo ""
