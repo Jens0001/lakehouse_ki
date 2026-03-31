@@ -77,7 +77,7 @@ services:
       - dremio_data:/opt/dremio/data
     environment:
       - DREMIO_MAX_MEMORY_SIZE_MB=4096
-     - - SERVER_ENVIRONMENT_JAVA_OPTS=-Droot.logger=WARN
+     # - SERVER_ENVIRONMENT_JAVA_OPTS=-Droot.logger=WARN
     networks:
       - lakehouse_network
 
