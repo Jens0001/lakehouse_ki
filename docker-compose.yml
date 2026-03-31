@@ -136,6 +136,9 @@ services:
       # Kaggle API Credentials (für spotify_kaggle_download DAG)
       - AIRFLOW_VAR_KAGGLE_USERNAME=${KAGGLE_USERNAME}
       - AIRFLOW_VAR_KAGGLE_API_KEY=${KAGGLE_API_KEY}
+      # Spotify API Credentials (für spotify_artist_update DAG)
+      - AIRFLOW_VAR_SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+      - AIRFLOW_VAR_SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
     # Airflow 3.x All-in-One Startup:
     # 1. DB migrieren (idempotent)
     # 2. Admin-User anlegen via FAB Security Manager (Airflow 3.x hat kein 'airflow users create')
