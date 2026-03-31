@@ -39,6 +39,7 @@ services:
       - "19120:19120"
     environment:
       - NESSIE_VERSION_STORE_TYPE=ROCKSDB
+      - QUARKUS_LOG_LEVEL=WARN
     volumes:
       - ./catalog/conf:/opt/nessie/conf
     networks:
@@ -56,6 +57,7 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID_TRINO}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET_TRINO}
+      - JAVA_TOOL_OPTIONS=-Dlog.level=WARN
     volumes:
       - ./trino/etc:/etc/trino
     depends_on:
@@ -75,6 +77,7 @@ services:
       - dremio_data:/opt/dremio/data
     environment:
       - DREMIO_MAX_MEMORY_SIZE_MB=4096
+      - SERVER_ENVIRONMENT_JAVA_OPTS=-Droot.logger=WARN
     networks:
       - lakehouse_network
 
@@ -113,6 +116,9 @@ services:
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       # Development: DAG-Parser reload schneller (default: 30s) → schnelle Iteration ohne Restart
       - AIRFLOW__SCHEDULER__DAG_FILE_PROCESSOR_INTERVAL=5
+      # Logging: INFO-Level auf WARNING reduzieren
+      - AIRFLOW__LOGGING__LOGGING_LEVEL=WARNING
+      - AIRFLOW__LOGGING__FAB_LOGGING_LEVEL=WARNING
       - KEYCLOAK_URL=${KEYCLOAK_URL:-http://keycloak:8082}
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID_AIRFLOW=${KEYCLOAK_CLIENT_ID_AIRFLOW}
