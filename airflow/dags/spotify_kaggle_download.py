@@ -197,7 +197,7 @@ with DAG(
     t3_trigger = BashOperator(
         task_id="trigger_spotify_initial_load",
         bash_command="""
-        curl -X POST http://airflow:8080/api/v1/dags/spotify_initial_load/dagRuns \
+        curl -X POST http://airflow:8080/api/v2/dags/spotify_initial_load/dagRuns \
           -H "Content-Type: application/json" \
           -d '{"conf": {}}' \
           -u admin:admin \
