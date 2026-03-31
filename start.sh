@@ -86,10 +86,10 @@ fi
 echo ""
 echo "Überprüfe und repariere Berechtigungen..."
 
-mkdir -p ./airflow/logs
-mkdir -p ./dbt/target
-mkdir -p ./dbt/logs
-mkdir -p /dbt/dbt_packages
+mkdir -p ./airflow/logs 2>/dev/null || true
+mkdir -p ./dbt/target 2>/dev/null || true
+mkdir -p ./dbt/logs 2>/dev/null || true
+mkdir -p /dbt/dbt_packages 2>/dev/null || true
 
 # Airflow DAG- und Logs-Verzeichnis müssen vom airflow-User (im Container)
 # beschreibbar sein. Setze auf 777 um Permission-Probleme zu vermeiden.
