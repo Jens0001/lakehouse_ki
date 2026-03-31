@@ -160,10 +160,9 @@ def load_tracks_to_raw(**_):
             _loaded_at          TIMESTAMP
         )
         WITH (
-            format = 'PARQUET',
-            "write.metadata.previous-versions-max" = 2,
-            "history.expire.min-snaps-to-keep" = 1,
-            "history.expire.max-snapshot-age-ms" = 300000
+            format       = 'PARQUET',
+            "max_previous_versions" = 2,
+            "delete_after_commit_enabled" = true
         )
     """)
 
