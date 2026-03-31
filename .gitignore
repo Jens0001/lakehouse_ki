@@ -45,3 +45,7 @@ dbt/target/
 
 # OS
 Thumbs.db
+
+
+#Claude
+.claude

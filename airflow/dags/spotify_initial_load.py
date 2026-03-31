@@ -365,10 +365,10 @@ with DAG(
     tags=["spotify", "kaggle", "raw", "initial-load"],
 ) as dag:
 
-#    t1_tracks = PythonOperator(
-#        task_id="load_tracks_to_raw",
-#        python_callable=load_tracks_to_raw,
-#    )
+    t1_tracks = PythonOperator(
+        task_id="load_tracks_to_raw",
+        python_callable=load_tracks_to_raw,
+    )
 
     t2_charts = PythonOperator(
         task_id="load_charts_to_raw",
@@ -376,5 +376,5 @@ with DAG(
     )
 
     # Tracks und Charts können parallel geladen werden – keine Abhängigkeit
-    #[t1_tracks, t2_charts]
-    [t2_charts]
+    [t1_tracks, t2_charts]
+    #[t2_charts]

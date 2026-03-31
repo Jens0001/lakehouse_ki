@@ -194,17 +194,17 @@ with DAG(
     )
 
     # Trigger spotify_initial_load nach erfolgreichen Downloads
-    t3_trigger = BashOperator(
-        task_id="trigger_spotify_initial_load",
-        bash_command="""
-        curl -X POST http://airflow:8080/api/v2/dags/spotify_initial_load/dagRuns \
-          -H "Content-Type: application/json" \
-          -d '{"conf": {}}' \
-          -u admin:admin \
-          --silent \
-          -w "\nStatus: %{http_code}\n"
-        """,
-    )
+    #t3_trigger = BashOperator(
+    #    task_id="trigger_spotify_initial_load",
+    #    bash_command="""
+    #    curl -X POST http://airflow:8080/api/v2/dags/spotify_initial_load/dagRuns \
+    #      -H "Content-Type: application/json" \
+    #      -d '{"conf": {}}' \
+    #      -u admin:admin \
+   #       --silent \
+   #       -w "\nStatus: %{http_code}\n"
+   #     """,
+    #)
 
     # Parallele Downloads, dann Trigger
-    [t1_tracks, t2_charts] >> t3_trigger
+    [t1_tracks, t2_charts] #>> t3_trigger
