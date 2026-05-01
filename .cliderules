@@ -1,0 +1,87 @@
+# .clinerules – Lakehouse KI Workspace
+
+## Scope
+Dieses Projekt ist der OpenWebUI+Ollama-Stack.
+Arbeite ausschließlich in diesem Verzeichnis.
+Greife nicht auf Dateien in anderen Workspace-Ordnern zu.
+
+## Rollenverständnis
+
+Du arbeitest an einem Data-Lakehouse-Stack (Docker Compose) mit folgenden Kernkomponenten:
+MinIO (S3-Storage), Apache Iceberg (Table Format), Nessie (Catalog),
+Trino (Query Engine), Apache Airflow (Orchestrierung), dbt (Transformationen),
+OpenMetadata (Data Governance), Keycloak (OIDC/SSO), Apache Superset (BI/Dashboards).
+
+Die Zielgruppe sind BI-/Data-Analytics-Fachleute, nicht reine Software-Entwickler.
+
+## Arbeitsweise
+
+- **Immer zuerst planen, dann umsetzen.** Stelle bei jeder nicht-trivialen Änderung
+  einen kurzen Plan vor und warte auf Bestätigung, bevor du Dateien änderst.
+- Bei trivialen Fixes (Typos, einzeilige Config-Korrekturen) ist direkte Umsetzung OK.
+- Wenn du dir bei einer Architekturentscheidung unsicher bist, frage nach –
+  rate nicht ins Blaue.
+
+## Code-Konventionen
+
+- **Sprache im Code**: Variablen, Funktionen, Klassen → Englisch.
+  Kommentare und Dokumentation → Deutsch.
+- Alle Codeänderungen nachvollziehbar und verständlich kommentieren.
+- SQL (Trino/PostgreSQL): Schlüsselwörter UPPERCASE, Aliase snake_case.
+- dbt-Models: Naming nach `<layer>_<domain>_<entity>.sql`
+  (z.B. `stg_billing_customers.sql`, `int_network_sessions.sql`).
+- Python (Airflow DAGs): Type Hints verwenden, Docstrings für alle Tasks.
+- Docker Compose: Services alphabetisch sortieren, Environment-Variablen
+  über `.env`-Dateien, keine Secrets hardcoded.
+- YAML: 2 Spaces Indentation, keine Tabs.
+
+## Stack-Regeln
+
+- Der gesamte Stack muss nach `docker compose up -d` direkt nutzbar sein.
+  Wenn ein Service manuelle Schritte nach dem Start braucht, weise aktiv
+  darauf hin und dokumentiere es in der README.md.
+- Keycloak ist der zentrale Identity Provider. Neue Services sollen wenn
+  möglich per OIDC angebunden werden (client_secret_post als Auth-Methode).
+- Iceberg-Tabellen: Regelmäßig auf Metadata-Bloat prüfen. Bei Schema-
+  Änderungen expire_snapshots und remove_orphan_files dokumentieren.
+- Airflow: Verwende TaskFlow API (@task-Decorator), keine klassischen
+  PythonOperator-Calls, sofern nicht nötig.
+
+## Dokumentationspflicht
+
+Nach jeder nicht-trivialen Änderung die folgenden Dateien aktualisieren:
+
+| Was                                          | Datei               |
+|----------------------------------------------|----------------------|
+| Anstehende und offene Aufgaben               | `Tasks.md`           |
+| Alle Änderungen (was, warum, wann)           | `Changelog.md`       |
+| Erkenntnisse, gelöste Probleme, Config-Tipps | `Memory.md`          |
+| Architekturentscheidungen + Begründungen     | `ARCHITECTURE.md`    |
+
+Changelog-Einträge im Format:
+```
+## [YYYY-MM-DD] Kurztitel
+- Was geändert wurde
+- Warum (Kontext/Problem)
+- Betroffene Services/Dateien
+```
+
+## Dateien und Verzeichnisse
+
+- Lies `ARCHITECTURE.md` und `Memory.md` zu Beginn jeder Session,
+  um den aktuellen Stand zu kennen.
+- Prüfe `Tasks.md` auf offene Aufgaben, bevor du neue anlegst.
+- Fasse dich bei Commits und Änderungen kurz – kein Boilerplate.
+
+## Sicherheit
+
+- Keine Passwörter, Tokens oder Secrets in Code oder Docs.
+  Verwende immer `.env`-Dateien oder Docker Secrets.
+- `.env`-Dateien niemals committen (muss in .gitignore stehen).
+
+## Testverhalten
+
+- Nach Änderungen an Docker-Compose-Services: prüfe mit
+  `docker compose config` ob die Syntax valide ist.
+- Nach Änderungen an dbt-Models: `dbt compile` zum Validieren vorschlagen.
+- Nach SQL-Änderungen: Mindestens ein `LIMIT 10`-Query zum Testen vorschlagen.

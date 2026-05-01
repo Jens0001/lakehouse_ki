@@ -47,5 +47,8 @@ dbt/target/
 Thumbs.db
 
 
+#AI-Coding
 #Claude
-.claude
+.claude/‚
+.clinerules
+.instructions.md

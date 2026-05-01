@@ -1,10 +1,10 @@
-{
+{{
     config(
         materialized='incremental',
         unique_key=['price_zone_hk', 'date_key'],
         on_schema_change='fail'
     )
-}
+}}
 
 -- fact_energy_price_monthly: Monatsaggregation der Day-Ahead-Spotpreise
 --
