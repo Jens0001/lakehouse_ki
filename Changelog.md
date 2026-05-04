@@ -4,6 +4,12 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Docker Compose: Keycloak-Abhängigkeit auf service_healthy gesetzt (04.05.2026)
+
+- **`docker-compose.yml`**: `airflow` depends_on.keycloak.condition von `service_started` auf `service_healthy` geändert
+- **Begründung**: Alle Services, die Keycloak als Authentifizierungs-Backend benötigen, warten nun auf einen gesunden Keycloak-Status
+- **Betroffene Services**: `airflow` (wartet nun auf Keycloak health check)
+
 ### OpenMetadata Elasticsearch cgroupv2 Bug Fix (04.05.2026)
 
 - **`elasticsearch/elasticsearch-wrapper.sh`**: Neues Wrapper-Script für das originale

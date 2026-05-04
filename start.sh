@@ -123,6 +123,13 @@ if [ -d "./dbt" ]; then
   echo "  ✓ ./dbt: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__)"
 fi
 
+# Elasticsearch Wrapper-Script muss ausführbar sein (wird als Volume gemountet)
+# Ohne chmod +x crasht der Start, da das gemountete Script keine Execute-Berechtigung hat
+if [ -f "./elasticsearch/elasticsearch-wrapper.sh" ]; then
+  chmod 777 ./elasticsearch/elasticsearch-wrapper.sh 2>/dev/null || true
+  echo "  ✓ ./elasticsearch/elasticsearch-wrapper.sh: Berechtigungen auf 777 gesetzt"
+fi
+
 echo ""
 echo "Überprüfe Airflow Fernet Key..."
 
