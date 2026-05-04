@@ -299,29 +299,23 @@ done
 if [ "$OM_READY" = true ]; then
   echo "Hole ingestion-bot JWT-Token von OpenMetadata..."
 
+  PASS_B64=$(echo -n "admin" | base64)
   ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8585/api/v1/users/login" \
     -H "Content-Type: application/json" \
-    -d '{"email":"admin@open-metadata.org","password":"admin"}' | \
-    python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('jwtToken',''))" 2>/dev/null || true)
+    -d "{\"email\":\"admin@open-metadata.org\",\"password\":\"${PASS_B64}\"}" | \
+    python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('accessToken',''))" 2>/dev/null || true)
 
   if [ -z "$ADMIN_TOKEN" ]; then
     echo "  ⚠️  Login fehlgeschlagen – ingestion-bot Token wird übersprungen."
   else
-    BOT_TOKEN=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+    # Bot-User-ID über Bots-Endpoint ermitteln, dann Token über token/{id} abrufen
+    BOT_USER_ID=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
       "http://localhost:8585/api/v1/bots/name/ingestion-bot" | \
-      python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-token = (d.get('botUser') or {})
-# Token kann direkt im botUser oder in authenticationMechanism liegen
-for key in ['jwtToken', 'JWTToken']:
-    if key in token:
-        print(token[key]); sys.exit()
-config = (token.get('authenticationMechanism') or {}).get('config') or {}
-for key in ['JWTToken', 'jwtToken']:
-    if key in config:
-        print(config[key]); sys.exit()
-" 2>/dev/null || true)
+      python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('botUser') or {}).get('id',''))" 2>/dev/null || true)
+
+    BOT_TOKEN=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+      "http://localhost:8585/api/v1/users/token/${BOT_USER_ID}" | \
+      python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('JWTToken',''))" 2>/dev/null || true)
 
     if [ -z "$BOT_TOKEN" ]; then
       echo "  ⚠️  ingestion-bot Token konnte nicht gelesen werden."
