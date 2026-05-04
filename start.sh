@@ -96,6 +96,21 @@ else
   echo "OM_URL zu .env hinzugefügt: ${OM_URL_VAL}"
 fi
 
+# KEYCLOAK_HOSTNAME automatisch an EXTERNAL_HOST anpassen
+# Wichtig für KC_HOSTNAME im Keycloak-Container (OIDC Issuer-URL)
+KEYCLOAK_HOSTNAME_VAL="${EXTERNAL_HOST}"
+if grep -q '^KEYCLOAK_HOSTNAME=' "$ENV_FILE"; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "s|^KEYCLOAK_HOSTNAME=.*|KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}|" "$ENV_FILE"
+  else
+    sed -i "s|^KEYCLOAK_HOSTNAME=.*|KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}|" "$ENV_FILE"
+  fi
+  echo "KEYCLOAK_HOSTNAME in .env aktualisiert: ${KEYCLOAK_HOSTNAME_VAL}"
+else
+  echo "KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}" >> "$ENV_FILE"
+  echo "KEYCLOAK_HOSTNAME zu .env hinzugefügt: ${KEYCLOAK_HOSTNAME_VAL}"
+fi
+
 # --- Pre-Start: Berechtigungen und Konfigurationen anpassen -------------------
 echo ""
 echo "Überprüfe und repariere Berechtigungen..."

@@ -4,6 +4,23 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ---
 
+## Keycloak OIDC Issuer-URL: KEYCLOAK_HOSTNAME muss in .env persistiert werden (04.05.2026)
+
+- **Problem**: Zugriff auf Keycloak über externe IP (z.B. `http://192.168.178.81:8082`) führte
+  zu automatischem Redirect auf `keycloak:8082` → Browser-Fehler.
+- **Ursache**: `KEYCLOAK_HOSTNAME` stand nicht in `.env`. `start.sh` setzte es per `export`,
+  aber Docker Compose liest Environment-Variablen primär aus `.env`. Der Fallback
+  `${KEYCLOAK_HOSTNAME:-keycloak}` in `docker-compose.yml:206` wurde aktiv.
+- **Folge**: Keycloak `KC_HOSTNAME=keycloak` → OIDC-Discovery-Endpoint gab
+  `http://keycloak:8082/realms/lakehouse` zurück.
+- **Fix**: `start.sh` schreibt `KEYCLOAK_HOSTNAME` nun automatisch aus `EXTERNAL_HOST` in `.env`
+  (analog zu `OM_URL`). `.env.example` enthält nun auch `KEYCLOAK_HOSTNAME=${EXTERNAL_HOST}`.
+- **Betroffene Dateien**: `start.sh`, `.env.example`, `docker-compose.yml` (Zeile 206)
+- **Wichtig**: Nach diesem Fix muss der Keycloak-Volume gelöscht werden, da der Realm-Import
+  nur beim ersten Start erfolgt: `docker volume rm lakehouse_ki_keycloak_data && ./start.sh`
+
+---
+
 ## OpenMetadata Elasticsearch cgroupv2 Bug (04.05.2026)
 
 - **Problem**: Elasticsearch 7.16.3 stürzt beim Start mit `NullPointerException` ab unter Linux mit cgroupv2

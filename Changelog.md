@@ -4,6 +4,18 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### Keycloak OIDC Issuer-URL Fix: KEYCLOAK_HOSTNAME wird nun in .env persistiert (04.05.2026)
+
+- **`start.sh`**: Neue Logik schreibt `KEYCLOAK_HOSTNAME` automatisch aus `EXTERNAL_HOST` in `.env`
+  (Zeilen 99-112). Vorher wurde die Variable nur per `export` als Shell-Variable gesetzt,
+  aber Docker Compose hat sie aus der `.env`-Datei nicht gelesen und nutzte den Default `keycloak`.
+- **Ursache**: `docker compose` liest Environment-Variablen primär aus `.env`. Der Fallback
+  `${KEYCLOAK_HOSTNAME:-keycloak}` in `docker-compose.yml:206` wurde aktiv, weil `KEYCLOAK_HOSTNAME`
+  nicht in `.env` definiert war – obwohl `EXTERNAL_HOST=192.168.178.81` dort stand.
+- **Folge**: Keycloak OIDC-Discovery-Endpoint gab `http://keycloak:8082/realms/lakehouse` zurück,
+  was im Browser nicht auflösbar ist → Weiterleitungsfehler bei Zugriff über externe IP.
+- **Betroffene Services**: `keycloak`
+
 ### Docker Compose: Keycloak-Abhängigkeit auf service_healthy gesetzt (04.05.2026)
 
 - **`docker-compose.yml`**: `airflow` depends_on.keycloak.condition von `service_started` auf `service_healthy` geändert
