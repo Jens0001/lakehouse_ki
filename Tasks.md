@@ -3,8 +3,11 @@
 ## Gelöst
 
 ### OpenMetadata Elasticsearch cgroupv2 Bug (04.05.2026)
-- [x] **Elasticsearch Start-Fix**: `-XX:-UseCGroupMemoryMetricForLimits` zu `ES_JAVA_OPTS` in `docker-compose.yml` hinzugefügt
-- **Problem**: ES 7.16.3 stürzte mit `NullPointerException` bei cgroupv2-Systemen ab
+- [x] **Elasticsearch Start-Fix**: `ES_JAVA_OPTS` auf leer gesetzt, Volume-Mount für `elasticsearch/jvm.options` hinzugefügt
+- [x] **`elasticsearch/jvm.options`**: Neue Datei mit JVM-Optionen (-Xms512m, -Xmx512m, -XX:+UseG1GC) erstellt
+- **Problem**: ES 7.16.3 (Java 11) stürzte mit `NullPointerException` bei cgroupv2-Systemen ab
+- **Ursache**: `JvmOptionsParser` liest cgroup-Metriken beim Parsen von `ES_JAVA_OPTS`
+- **Erster Fix fehlgeschlagen**: `-XX:-UseCGroupMemoryMetricForLimits` existiert nur in Java 17+, ES 7.16.3 verwendet Java 11
 - **Betroffen**: Service `openmetadata-es`
 
 ## Offen

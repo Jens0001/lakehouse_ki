@@ -1,0 +1,15 @@
+# Custom JVM options for Elasticsearch 7.16.3
+# Fix for cgroupv2 NullPointerException under Linux 5.x+
+# Speicherlimits werden hier definiert statt über ES_JAVA_OPTS,
+# um den JvmOptionsParser zu umgehen, der cgroup-Metriken liest.
+
+## GC
+-XX:+UseG1GC
+
+## Speicher
+-Xms512m
+-Xmx512m
+
+## JVM Flags
+-XX:-AssumeMP
+-XX:+UseMPMOD

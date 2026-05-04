@@ -327,10 +327,12 @@ services:
     container_name: lakehouse_openmetadata_es
     environment:
       - discovery.type=single-node
-      # -XX:-UseCGroupMemoryMetricForLimits: Fix für Java cgroupv2 Bug (NullPointerException beim Start in Containern)
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m -XX:-UseCGroupMemoryMetricForLimits
+      # ES_JAVA_OPTS leer lassen – Speicherlimits kommen aus der gemounteten jvm.options Datei
+      # Das umgeht den JvmOptionsParser, der bei ES_JAVA_OPTS-Parsing cgroup-Metriken liest (cgroupv2 Bug)
+      - ES_JAVA_OPTS=
     volumes:
       - openmetadata_es_data:/usr/share/elasticsearch/data
+      - ./elasticsearch/jvm.options:/usr/share/elasticsearch/config/jvm.options:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
       interval: 15s

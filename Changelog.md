@@ -6,14 +6,20 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ### OpenMetadata Elasticsearch cgroupv2 Bug Fix (04.05.2026)
 
-- **`docker-compose.yml`**: `-XX:-UseCGroupMemoryMetricForLimits` zu `ES_JAVA_OPTS` des
-  `openmetadata-es` Services hinzugefügt
+- **`docker-compose.yml`**: `ES_JAVA_OPTS` auf leer gesetzt, Volume-Mount für
+  `elasticsearch/jvm.options` hinzugefügt
+- **`elasticsearch/jvm.options`**: Neue Datei mit JVM-Optionen (-Xms512m, -Xmx512m, -XX:+UseG1GC)
 - **Ursache**: Elasticsearch 7.16.3 (Java 11) stürzt beim Start ab mit
   `NullPointerException: Cannot invoke jdk.internal.platform.CgroupInfo.getMountPoint()`
-  unter Linux mit cgroupv2 – die JVM kann die cgroup-Speicherlimits nicht korrekt lesen
+  unter Linux mit cgroupv2 (Kernel 6.17+, Ubuntu 25.10) – der `JvmOptionsParser` im ES-Image
+  liest cgroup-Speichermetriken beim Parsen von `ES_JAVA_OPTS` und crasht, wenn der Controller
+  nicht verfügbar ist
 - **Betroffener Service**: `openmetadata-es` (Elasticsearch)
-- **Fix**: JVM-Flag `-XX:-UseCGroupMemoryMetricForLimits` deaktiviert das Lesen von
-  cgroup-Speichermetriken → Elasticsearch startet korrekt
+- **Erster Fix-Versuch**: `-XX:-UseCGroupMemoryMetricForLimits` → **fehlgeschlagen**,
+  da diese Option erst in Java 17+ existiert, ES 7.16.3 verwendet Java 11
+- **Endgültiger Fix**: `ES_JAVA_OPTS` leer lassen und Speicherlimits in eine gemountete
+  `jvm.options` Datei auslagern → der `JvmOptionsParser` wird nicht aufgerufen,
+  JVM liest Optionen direkt aus der Datei
 
 ### PyIceberg Bulk-Write DAG + Backfill-Bug-Fixes (04.05.2026)
 

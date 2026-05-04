@@ -8,9 +8,18 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 - **Problem**: Elasticsearch 7.16.3 stürzt beim Start mit `NullPointerException` ab unter Linux mit cgroupv2
 - **Stack Trace**: `Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "anyController" is null`
-- **Ursache**: Java 11 im ES-Image versucht, cgroup-Speichermetriken zu lesen, aber der Controller ist nicht verfügbar
-- **Lösung**: `-XX:-UseCGroupMemoryMetricForLimits` zu `ES_JAVA_OPTS` in `docker-compose.yml` hinzufügen
+- **Ursache**: Der `JvmOptionsParser` im ES-Image liest cgroup-Speichermetriken beim Parsen von `ES_JAVA_OPTS`.
+  Unter Ubuntu 25.10 mit Kernel 6.17 und cgroupv2 (`nsdelegate,memory_recursiveprot`) ist der Controller
+  nicht im erwarteten Format verfügbar → NullPointerException
+- **Erster Fix fehlgeschlagen**: `-XX:-UseCGroupMemoryMetricForLimits` existiert erst ab Java 17.
+  ES 7.16.3 verwendet Java 11 → `Unrecognized VM option`
+- **Endgültiger Fix**:
+  - `ES_JAVA_OPTS` auf leeren String gesetzt in `docker-compose.yml`
+  - Volume-Mount für `elasticsearch/jvm.options` hinzugefügt
+  - `elasticsearch/jvm.options` enthält `-Xms512m`, `-Xmx512m`, `-XX:+UseG1GC`
+  - JVM liest Optionen direkt aus der Datei, `JvmOptionsParser` wird nicht aufgerufen
 - **Betroffene Services**: `openmetadata-es` (Elasticsearch 7.16.3)
+- **Host-System**: Ubuntu 25.10, Kernel 6.17.0-7-generic, Docker cgroupv2, systemd Driver
 - **Dokumentation**: Siehe auch Changelog.md und Tasks.md
 
 ---
