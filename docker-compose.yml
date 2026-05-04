@@ -61,6 +61,12 @@ services:
      # - JAVA_TOOL_OPTIONS=-Dlog.level=WARN
     volumes:
       - ./trino/etc:/etc/trino
+    healthcheck:
+      test: ["CMD", "/usr/lib/trino/bin/health-check"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
     depends_on:
       keycloak:
         condition: service_healthy
