@@ -45,8 +45,11 @@ fi
 # Keystore password holen
 unset KEYSTORE_PASSWORD
 KEYSTORE_PASSWORD=
-if [[ $CHECK_KEYSTORE = true ]] \
-    && "$ES_HOME/bin/elasticsearch-keystore" has-passwd --silent 2>/dev/null; then
+if [[ $CHECK_KEYSTORE = true ]] && \
+    "$ES_HOME/bin/elasticsearch-keystore" has-passwd --silent 2>/dev/null; then
+  if ! read -s -r -p "Elasticsearch keystore password: " KEYSTORE_PASSWORD; then
+    echo "Failed to read keystore password on console" 1>&2
+    exit 1
   fi
 fi
 
