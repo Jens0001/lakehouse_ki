@@ -14,8 +14,10 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 - **`elasticsearch/elasticsearch-wrapper.sh`**: Neues Wrapper-Script für das originale
   `elasticsearch` Binary – ersetzt den JvmOptionsParser-Aufruf mit `-Des.cgroups.hierarchy.override=/`
-- **`docker-compose.yml`**: Volume-Mount für Wrapper-Script, `entrypoint` mit `chmod +x` hinzugefügt
-  (stellt sicher, dass das gemountete Script unter Windows/git ausführbar ist)
+- **`docker-compose.yml`**: Volume-Mount an `/opt/elasticsearch-wrapper.sh`, entrypoint kopiert
+  das Script nach `/usr/share/elasticsearch/bin/elasticsearch` und setzt Execute-Berechtigung
+  (direktes Mounten auf `/usr/share/elasticsearch/bin/elasticsearch` schlägt fehl:
+  "Read-only file system")
 - **Ursache**: Elasticsearch 7.16.3 (Java 11) stürzt beim Start ab mit
   `NullPointerException: Cannot invoke jdk.internal.platform.CgroupInfo.getMountPoint()`
   unter Linux mit cgroupv2 (Kernel 6.17+, Ubuntu 25.10) – der `JvmOptionsParser` im ES-Image

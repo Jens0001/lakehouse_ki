@@ -330,10 +330,10 @@ services:
       # ES_JAVA_OPTS leer – cgroupv2 Fix ist im elasticsearch-wrapper.sh
     volumes:
       - openmetadata_es_data:/usr/share/elasticsearch/data
-      # Wrapper ersetzt das originale elasticsearch Binary mit cgroupv2 Fix
-      - ./elasticsearch/elasticsearch-wrapper.sh:/usr/share/elasticsearch/bin/elasticsearch:ro
-    # chmod +x stellt sicher, dass das gemountete Wrapper-Script ausführbar ist
-    entrypoint: ["sh", "-c", "chmod +x /usr/share/elasticsearch/bin/elasticsearch && /usr/local/bin/docker-entrypoint.sh eswrapper"]
+      # Wrapper-Script wird an einen temporären Ort gemountet und dann kopiert
+      - ./elasticsearch/elasticsearch-wrapper.sh:/opt/elasticsearch-wrapper.sh:ro
+    # Kopiert das Wrapper-Script an die Zielposition und setzt Execute-Berechtigung
+    entrypoint: ["sh", "-c", "cp /opt/elasticsearch-wrapper.sh /usr/share/elasticsearch/bin/elasticsearch && chmod +x /usr/share/elasticsearch/bin/elasticsearch && /usr/local/bin/docker-entrypoint.sh eswrapper"]
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
       interval: 15s
