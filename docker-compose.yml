@@ -57,6 +57,7 @@ services:
       - KEYCLOAK_REALM=${KEYCLOAK_REALM}
       - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID_TRINO}
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET_TRINO}
+      - KEYCLOAK_ISSUER=http://${KEYCLOAK_HOSTNAME:-keycloak}:8082/realms/${KEYCLOAK_REALM}
      # - JAVA_TOOL_OPTIONS=-Dlog.level=WARN
     volumes:
       - ./trino/etc:/etc/trino

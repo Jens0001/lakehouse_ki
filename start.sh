@@ -96,9 +96,14 @@ else
   echo "OM_URL zu .env hinzugefügt: ${OM_URL_VAL}"
 fi
 
-# KEYCLOAK_HOSTNAME automatisch an EXTERNAL_HOST anpassen
-# Wichtig für KC_HOSTNAME im Keycloak-Container (OIDC Issuer-URL)
-KEYCLOAK_HOSTNAME_VAL="${EXTERNAL_HOST}"
+# KEYCLOAK_HOSTNAME automatisch setzen:
+# - localhost → "keycloak" (Docker-interner Hostname; Container können "localhost" nicht auflösen)
+# - LAN-IP  → IP direkt (Browser und Container können die IP erreichen)
+if [ "${EXTERNAL_HOST}" = "localhost" ]; then
+  KEYCLOAK_HOSTNAME_VAL="keycloak"
+else
+  KEYCLOAK_HOSTNAME_VAL="${EXTERNAL_HOST}"
+fi
 if grep -q '^KEYCLOAK_HOSTNAME=' "$ENV_FILE"; then
   if [[ "$(uname -s)" == "Darwin" ]]; then
     sed -i '' "s|^KEYCLOAK_HOSTNAME=.*|KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}|" "$ENV_FILE"
@@ -193,27 +198,9 @@ else
   echo "  ✓ Airflow Fernet Key ist gültig"
 fi
 
-echo ""
-echo "Aktualisiere Service-Konfigurationen..."
-
-# Trino muss die richtige externe Keycloak-URL kennen (BEVOR Container starten!)
-if [ "${EXTERNAL_HOST}" != "localhost" ]; then
-  bash init-scripts/update-trino-config.sh "${EXTERNAL_HOST}"
-fi
-
 # --- Docker Compose starten -------------------------------------------------
 echo ""
 echo "Starte Stack..."
-
-# Keycloak muss wissen, auf welcher URL es erreichbar ist (für OIDC Discovery)
-# Falls nicht localhost, nutze EXTERNAL_HOST; sonst nutze "keycloak" (Docker-intern)
-if [ "${EXTERNAL_HOST}" = "localhost" ]; then
-  export KEYCLOAK_HOSTNAME="keycloak"
-  export KEYCLOAK_URL="http://keycloak:8082"
-else
-  export KEYCLOAK_HOSTNAME="${EXTERNAL_HOST}"
-  export KEYCLOAK_URL="http://${EXTERNAL_HOST}:8082"
-fi
 
 if [ -n "$BUILD_FLAG" ]; then
   echo "  (mit Docker Image Rebuild)"
