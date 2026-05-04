@@ -300,37 +300,51 @@ if [ "$OM_READY" = true ]; then
   echo "Hole ingestion-bot JWT-Token von OpenMetadata..."
 
   PASS_B64=$(echo -n "admin" | base64)
-  ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8585/api/v1/users/login" \
-    -H "Content-Type: application/json" \
-    -d "{\"email\":\"admin@open-metadata.org\",\"password\":\"${PASS_B64}\"}" | \
-    python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('accessToken',''))" 2>/dev/null || true)
+  ADMIN_TOKEN=""
+  # Login-Retry: Auth-System braucht nach Health-OK noch einige Sekunden
+  for attempt in $(seq 1 6); do
+    ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8585/api/v1/users/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"email\":\"admin@open-metadata.org\",\"password\":\"${PASS_B64}\"}" | \
+      python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('accessToken',''))" 2>/dev/null || true)
+    if [ -n "$ADMIN_TOKEN" ]; then
+      echo "  ✓ Login erfolgreich (Versuch ${attempt})"
+      break
+    fi
+    echo "  Auth noch nicht bereit, warte 10s... (Versuch ${attempt}/6)"
+    sleep 10
+  done
 
   if [ -z "$ADMIN_TOKEN" ]; then
-    echo "  ⚠️  Login fehlgeschlagen – ingestion-bot Token wird übersprungen."
+    echo "  ⚠️  Login fehlgeschlagen nach 6 Versuchen – ingestion-bot Token wird übersprungen."
   else
     # Bot-User-ID über Bots-Endpoint ermitteln, dann Token über token/{id} abrufen
     BOT_USER_ID=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
       "http://localhost:8585/api/v1/bots/name/ingestion-bot" | \
       python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('botUser') or {}).get('id',''))" 2>/dev/null || true)
 
-    BOT_TOKEN=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-      "http://localhost:8585/api/v1/users/token/${BOT_USER_ID}" | \
-      python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('JWTToken',''))" 2>/dev/null || true)
-
-    if [ -z "$BOT_TOKEN" ]; then
-      echo "  ⚠️  ingestion-bot Token konnte nicht gelesen werden."
+    if [ -z "$BOT_USER_ID" ]; then
+      echo "  ⚠️  ingestion-bot nicht gefunden."
     else
-      OLD_TOKEN=$(grep '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || true)
-      if [ "$OLD_TOKEN" != "$BOT_TOKEN" ]; then
-        if grep -q '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE"; then
-          sed_inplace "s|^OPENMETADATA_INGESTION_BOT_TOKEN=.*|OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}|" "$ENV_FILE"
-        else
-          echo "OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}" >> "$ENV_FILE"
-        fi
-        echo "  ✓ ingestion-bot Token in .env aktualisiert – starte Airflow neu..."
-        docker compose up -d airflow
+      BOT_TOKEN=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+        "http://localhost:8585/api/v1/users/token/${BOT_USER_ID}" | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('JWTToken',''))" 2>/dev/null || true)
+
+      if [ -z "$BOT_TOKEN" ]; then
+        echo "  ⚠️  ingestion-bot Token konnte nicht gelesen werden."
       else
-        echo "  ✓ ingestion-bot Token unverändert, kein Neustart nötig."
+        OLD_TOKEN=$(grep '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || true)
+        if [ "$OLD_TOKEN" != "$BOT_TOKEN" ]; then
+          if grep -q '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE"; then
+            sed_inplace "s|^OPENMETADATA_INGESTION_BOT_TOKEN=.*|OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}|" "$ENV_FILE"
+          else
+            echo "OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}" >> "$ENV_FILE"
+          fi
+          echo "  ✓ ingestion-bot Token in .env aktualisiert – starte Airflow neu..."
+          docker compose up -d airflow
+        else
+          echo "  ✓ ingestion-bot Token unverändert, kein Neustart nötig."
+        fi
       fi
     fi
   fi

@@ -4,6 +4,63 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### OpenLineage: Airflow → OpenMetadata vollständig automatisiert (04.05.2026)
+
+**Problem 1 – falscher Endpunkt (405 Method Not Allowed)**:
+- `OPENLINEAGE_URL=http://openmetadata-server:8585` ließ Airflow Events an
+  `POST /api/v1/lineage` senden. Dieser Endpunkt akzeptiert nur `PUT` (für manuelle Lineage-Updates).
+  Der OpenLineage-Receiver in OpenMetadata liegt unter `/api/v1/openlineage/lineage`.
+
+**Problem 2 – Scheduler und Task-Executor nutzen unterschiedliche Transport-Konfigurationen**:
+- `OPENLINEAGE_ENDPOINT` (aus dem openlineage-python Client) wurde nur vom Task-Executor-Prozess
+  gelesen, nicht vom Scheduler-Prozess. Dadurch empfing COMPLETE-Events den richtigen Endpunkt,
+  START-Events aber weiterhin den alten falschen.
+- **Fix**: `AIRFLOW__OPENLINEAGE__TRANSPORT` als einheitliche JSON-Konfiguration, die von allen
+  Airflow-Prozessen (Scheduler, Task-Executor, DAG-Processor) uniform gelesen wird.
+
+**Problem 3 – fehlende Authentifizierung (ebenfalls 405)**:
+- OpenMetadata lehnt Requests ohne gültigen Bearer-Token ab. Der ingestion-bot hat einen
+  permanenten JWT-Token (`JWTTokenExpiry: Unlimited`), der über die OM-API abgerufen werden muss.
+
+**Änderungen**:
+- **`docker-compose.yml`**: `OPENLINEAGE_URL`, `OPENLINEAGE_ENDPOINT`, `OPENLINEAGE_API_KEY`
+  ersetzt durch:
+  ```
+  AIRFLOW__OPENLINEAGE__TRANSPORT={"type": "http", "url": "http://openmetadata-server:8585",
+    "endpoint": "/api/v1/openlineage/lineage",
+    "auth": {"type": "api_key", "apiKey": "${OPENMETADATA_INGESTION_BOT_TOKEN}", "apiKeyPrefix": "Bearer"}}
+  ```
+- **`docker-compose.yml`**: `AIRFLOW_CONN_TRINO_DEFAULT` als Umgebungsvariable ergänzt –
+  zuverlässiger als das Init-Script (s.u.).
+- **`.env`**: `OPENMETADATA_INGESTION_BOT_TOKEN` als neue Variable.
+- **`start.sh`**: Neuer Block nach dem Keycloak-Block:
+  1. Wartet auf OM Health (`/api/v1/system/version`), bis zu 3 Minuten.
+  2. Login via `POST /api/v1/users/login` (Passwort Base64-kodiert, Response: `accessToken`).
+  3. Bot-User-ID via `GET /api/v1/bots/name/ingestion-bot` → `botUser.id`.
+  4. Token via `GET /api/v1/users/token/{userId}` → `JWTToken`.
+  5. Schreibt Token in `.env`; startet Airflow nur neu wenn der Token sich geändert hat.
+  6. Login-Retry mit 6 Versuchen à 10s, da `/api/v1/system/version` antwortet bevor
+     das Auth-System vollständig bereit ist.
+
+**Wichtige API-Details** (OM 1.12.3):
+- Login-Passwort muss Base64-kodiert übergeben werden.
+- Response-Key ist `accessToken` (nicht `jwtToken`).
+- Token lesen: `GET /api/v1/users/token/{userId}` (nicht `generateToken` – das erzeugt einen neuen!).
+
+### Airflow `trino_default` Connection via Umgebungsvariable (04.05.2026)
+
+- **Problem**: `AirflowNotFoundException: The conn_id trino_default isn't defined`.
+  Das Init-Script `scripts/airflow_init_connections.py` schlägt unter Airflow 3.x sporadisch fehl,
+  da es direkt via SQLAlchemy schreibt und dabei Race Conditions mit der DB-Migration auftreten.
+- **Fix**: `AIRFLOW_CONN_TRINO_DEFAULT` als Umgebungsvariable in `docker-compose.yml` gesetzt.
+  Airflow liest `AIRFLOW_CONN_*`-Variablen beim Start automatisch ein – zuverlässig und ohne
+  Init-Script. Format als JSON-String:
+  ```
+  {"conn_type":"trino","host":"trino","login":"trino_user","port":8080,"schema":"default","extra":{"catalog":"iceberg"}}
+  ```
+- **Betroffene Services**: `airflow`
+- **Betroffene Dateien**: `docker-compose.yml`, `scripts/airflow_init_connections.py` (bleibt als Fallback)
+
 ### Keycloak OIDC Issuer-URL Fix: KEYCLOAK_HOSTNAME wird nun in .env persistiert (04.05.2026)
 
 - **`start.sh`**: Neue Logik schreibt `KEYCLOAK_HOSTNAME` automatisch aus `EXTERNAL_HOST` in `.env`
