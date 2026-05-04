@@ -72,6 +72,49 @@ Trino allein wäre für Cognos funktional ausreichend (JDBC möglich). Dremio br
 
 ---
 
+## 1a. Iceberg Write Paths: Trino SQL vs. PyIceberg/PyArrow
+
+Der Stack verwendet zwei komplementäre Write-Paths für Iceberg-Tabellen:
+
+```
+Inkrementell (täglich):    Airflow → TrinoHook → Trino → Iceberg
+Bulk-Backfill (einmalig):  Airflow → PyIceberg → Nessie REST → MinIO (Parquet)
+```
+
+### Trino SQL (Standard-Path)
+
+Alle täglichen DAGs (`open_meteo_to_raw`, `energy_charts_to_raw`) schreiben via `TrinoHook` und
+`INSERT INTO ... VALUES (...)`. Trino übernimmt Parquet-Encoding, Partitionierung und
+Snapshot-Commit.
+
+**Grenze**: Trinos ANTLR-Lexer limitiert Queries auf ~10.000 Tokens. Ein VALUES-Batch mit 100
+Zeilen Wetterdaten ≈ 400 Tokens → safe. Ein monatlanger Batch (744 Zeilen) ≈ 26.000 Tokens →
+überschreitet das Limit. Backfill-DAGs batchen daher auf 5.000 Zeilen pro INSERT.
+
+### PyIceberg/PyArrow (Bulk-Backfill)
+
+`energy_backfill_pyarrow.py` umgeht Trino INSERT vollständig:
+
+1. PyArrow baut eine in-memory `pa.Table`
+2. `pyiceberg` schreibt die Parquet-Datei direkt nach MinIO
+3. Nessie REST Catalog (`http://nessie:19120/iceberg`) committet den neuen Snapshot
+
+**Vorteile**: Kein Token-Limit, kein Trino-Overhead, direkter S3-Schreibdurchsatz.
+**Einschränkung**: Schema-Änderungen müssen mit dem Nessie/Iceberg-Schema konsistent sein;
+`table.overwrite(filter)` löscht bestehende Parquet-Dateien für den Partition-Wert.
+
+### Endpoint-Unterschied Nessie
+
+| Endpunkt | URL | Verwendet von |
+|---|---|---|
+| Nessie Core API | `http://nessie:19120/api/v2` | Trino (`iceberg.properties`) |
+| Nessie Iceberg REST API | `http://nessie:19120/iceberg` | PyIceberg (Airflow Variable `NESSIE_URI`) |
+
+> **Konvention**: Trino bleibt die einzige Engine für dbt-Transforms und täglich inkrementelle Loads.
+> PyIceberg wird ausschließlich für einmalige Backfills mit großem Datenvolumen eingesetzt.
+
+---
+
 ## 2. Views: Keine Iceberg Views als Architektur-Komponente
 
 ### Problem

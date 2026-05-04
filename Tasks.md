@@ -65,6 +65,11 @@
   ```
 
 
+- [ ] **DAG `energy_backfill_pyarrow` triggern** – Backfill Energy-Preise via PyArrow/PyIceberg (kein Trino INSERT)
+  - Voraussetzung: Stack neu starten damit `NESSIE_URI` Variable und `pyiceberg[pyarrow,s3fs]` aktiv sind
+  - Verifikation: `SELECT date_key, COUNT(*) FROM iceberg.raw.energy_price_hourly GROUP BY 1 ORDER BY 1`
+- [ ] **Weather-Äquivalent** `weather_backfill_pyarrow.py` erstellen (nach erfolgreichem Energy-Test)
+
 - [ ] **Airflow Variable setzen** (Airflow UI → Admin → Variables): `ENERGY_CHARTS_BIDDING_ZONE = DE-LU`
 - [ ] **DAG `energy_charts_to_raw` triggern** – Backfill ab 2018-10-01 (ältestes verfügbares Datum für DE-LU)
   - Hinweis: `max_active_runs=3` begrenzt parallele Runs; Backfill läuft ca. 2.700 Tage durch
