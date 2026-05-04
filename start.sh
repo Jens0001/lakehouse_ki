@@ -22,6 +22,15 @@ COMPOSE_FILE="docker-compose.yml"
 ENV_FILE=".env"
 BUILD_FLAG=""
 
+# Portabler sed -i: Linux braucht kein Suffix-Argument, macOS schon.
+sed_inplace() {
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
 # --- Parameter-Verarbeitung --------------------------------------------------
 detect_ip() {
   local ip=""
@@ -69,12 +78,7 @@ fi
 
 # EXTERNAL_HOST in .env setzen (ersetzen oder hinzufügen)
 if grep -q '^EXTERNAL_HOST=' "$ENV_FILE"; then
-  # Bestehenden Wert ersetzen (plattformübergreifend)
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    sed -i '' "s|^EXTERNAL_HOST=.*|EXTERNAL_HOST=${EXTERNAL_HOST}|" "$ENV_FILE"
-  else
-    sed -i "s|^EXTERNAL_HOST=.*|EXTERNAL_HOST=${EXTERNAL_HOST}|" "$ENV_FILE"
-  fi
+  sed_inplace "s|^EXTERNAL_HOST=.*|EXTERNAL_HOST=${EXTERNAL_HOST}|" "$ENV_FILE"
   echo "EXTERNAL_HOST in .env aktualisiert: ${EXTERNAL_HOST}"
 else
   # Variable existiert noch nicht → am Anfang einfügen
@@ -85,11 +89,7 @@ fi
 # OM_URL automatisch an EXTERNAL_HOST anpassen
 OM_URL_VAL="http://${EXTERNAL_HOST}:8585/api"
 if grep -q '^OM_URL=' "$ENV_FILE"; then
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    sed -i '' "s|^OM_URL=.*|OM_URL=${OM_URL_VAL}|" "$ENV_FILE"
-  else
-    sed -i "s|^OM_URL=.*|OM_URL=${OM_URL_VAL}|" "$ENV_FILE"
-  fi
+  sed_inplace "s|^OM_URL=.*|OM_URL=${OM_URL_VAL}|" "$ENV_FILE"
   echo "OM_URL in .env aktualisiert: ${OM_URL_VAL}"
 else
   echo "OM_URL=${OM_URL_VAL}" >> "$ENV_FILE"
@@ -104,17 +104,21 @@ if [ "${EXTERNAL_HOST}" = "localhost" ]; then
 else
   KEYCLOAK_HOSTNAME_VAL="${EXTERNAL_HOST}"
 fi
+KEYCLOAK_URL_VAL="http://${KEYCLOAK_HOSTNAME_VAL}:8082"
+
 if grep -q '^KEYCLOAK_HOSTNAME=' "$ENV_FILE"; then
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    sed -i '' "s|^KEYCLOAK_HOSTNAME=.*|KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}|" "$ENV_FILE"
-  else
-    sed -i "s|^KEYCLOAK_HOSTNAME=.*|KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}|" "$ENV_FILE"
-  fi
-  echo "KEYCLOAK_HOSTNAME in .env aktualisiert: ${KEYCLOAK_HOSTNAME_VAL}"
+  sed_inplace "s|^KEYCLOAK_HOSTNAME=.*|KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}|" "$ENV_FILE"
 else
   echo "KEYCLOAK_HOSTNAME=${KEYCLOAK_HOSTNAME_VAL}" >> "$ENV_FILE"
-  echo "KEYCLOAK_HOSTNAME zu .env hinzugefügt: ${KEYCLOAK_HOSTNAME_VAL}"
 fi
+echo "KEYCLOAK_HOSTNAME in .env aktualisiert: ${KEYCLOAK_HOSTNAME_VAL}"
+
+if grep -q '^KEYCLOAK_URL=' "$ENV_FILE"; then
+  sed_inplace "s|^KEYCLOAK_URL=.*|KEYCLOAK_URL=${KEYCLOAK_URL_VAL}|" "$ENV_FILE"
+else
+  echo "KEYCLOAK_URL=${KEYCLOAK_URL_VAL}" >> "$ENV_FILE"
+fi
+echo "KEYCLOAK_URL in .env aktualisiert: ${KEYCLOAK_URL_VAL}"
 
 # --- Pre-Start: Berechtigungen und Konfigurationen anpassen -------------------
 echo ""
@@ -184,11 +188,7 @@ if ! is_valid_fernet "$FERNET_KEY"; then
 
   # Aktualisiere oder füge hinzu
   if grep -q '^AIRFLOW_FERNET_KEY=' "$ENV_FILE"; then
-    if [[ "$(uname -s)" == "Darwin" ]]; then
-      sed -i '' "s|^AIRFLOW_FERNET_KEY=.*|AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}|" "$ENV_FILE"
-    else
-      sed -i "s|^AIRFLOW_FERNET_KEY=.*|AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}|" "$ENV_FILE"
-    fi
+    sed_inplace "s|^AIRFLOW_FERNET_KEY=.*|AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}|" "$ENV_FILE"
     echo "  ✓ Airflow Fernet Key aktualisiert"
   else
     echo "AIRFLOW_FERNET_KEY=${NEW_FERNET_KEY}" >> "$ENV_FILE"
@@ -197,6 +197,33 @@ if ! is_valid_fernet "$FERNET_KEY"; then
 else
   echo "  ✓ Airflow Fernet Key ist gültig"
 fi
+
+echo ""
+echo "Prüfe Keycloak Client Secrets..."
+
+is_valid_secret() {
+  local s="$1"
+  [ -n "$s" ] && ! [[ "$s" =~ ^(CHANGE_ME|TODO|REPLACE|XXX) ]] && [ ${#s} -ge 20 ]
+}
+
+gen_secret() {
+  openssl rand -base64 48 | tr -d '\n'
+}
+
+for VAR in KEYCLOAK_CLIENT_SECRET_TRINO KEYCLOAK_CLIENT_SECRET_MINIO KEYCLOAK_CLIENT_SECRET_AIRFLOW; do
+  VAL=$(grep "^${VAR}=" "$ENV_FILE" | cut -d'=' -f2- || true)
+  if ! is_valid_secret "$VAL"; then
+    NEW_VAL=$(gen_secret)
+    if grep -q "^${VAR}=" "$ENV_FILE"; then
+      sed_inplace "s|^${VAR}=.*|${VAR}=${NEW_VAL}|" "$ENV_FILE"
+    else
+      echo "${VAR}=${NEW_VAL}" >> "$ENV_FILE"
+    fi
+    echo "  ✓ ${VAR}: neuer Secret generiert"
+  else
+    echo "  ✓ ${VAR}: vorhanden"
+  fi
+done
 
 # --- Docker Compose starten -------------------------------------------------
 echo ""
