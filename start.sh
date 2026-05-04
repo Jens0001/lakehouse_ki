@@ -335,12 +335,21 @@ if [ "$OM_READY" = true ]; then
       else
         OLD_TOKEN=$(grep '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || true)
         if [ "$OLD_TOKEN" != "$BOT_TOKEN" ]; then
+          # Token in .env schreiben
           if grep -q '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE"; then
             sed_inplace "s|^OPENMETADATA_INGESTION_BOT_TOKEN=.*|OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}|" "$ENV_FILE"
           else
             echo "OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}" >> "$ENV_FILE"
           fi
-          echo "  ✓ ingestion-bot Token in .env aktualisiert – starte Airflow neu..."
+          # Komplettes Transport-JSON mit eingebettetem Token als eigene Variable speichern.
+          # Vermeidet variable-in-JSON-in-YAML Substitutionsprobleme in docker-compose.yml.
+          TRANSPORT_JSON="{\"type\": \"http\", \"url\": \"http://openmetadata-server:8585\", \"endpoint\": \"/api/v1/openlineage/lineage\", \"auth\": {\"type\": \"api_key\", \"apiKey\": \"${BOT_TOKEN}\", \"apiKeyPrefix\": \"Bearer\"}}"
+          if grep -q '^OPENLINEAGE_TRANSPORT_JSON=' "$ENV_FILE"; then
+            sed_inplace "s|^OPENLINEAGE_TRANSPORT_JSON=.*|OPENLINEAGE_TRANSPORT_JSON=${TRANSPORT_JSON}|" "$ENV_FILE"
+          else
+            echo "OPENLINEAGE_TRANSPORT_JSON=${TRANSPORT_JSON}" >> "$ENV_FILE"
+          fi
+          echo "  ✓ ingestion-bot Token und Transport-JSON in .env aktualisiert – starte Airflow neu..."
           docker compose up -d airflow
         else
           echo "  ✓ ingestion-bot Token unverändert, kein Neustart nötig."
