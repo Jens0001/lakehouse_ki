@@ -4,6 +4,21 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### PyIceberg Bulk-Write DAG + Backfill-Bug-Fixes (04.05.2026)
+
+- **Neuer DAG `energy_backfill_pyarrow.py`**: Schreibt Energy-Preisdaten via PyArrow/PyIceberg direkt
+  in den Nessie REST Catalog – kein Trino INSERT, kein Token-Limit. Trino wird nur noch für den
+  Skip-Check (SELECT DISTINCT) verwendet.
+- **`weather_backfill_landing_to_raw.py`**: Skip-Check von Monats- auf Tages-Ebene korrigiert
+  (`CAST(date_key AS VARCHAR)` statt `date_trunc('month', ...)`); DELETE und INSERT
+  auf Tag-Granularität umgestellt; batch_size=5000 je INSERT.
+- **`energy_backfill_landing_to_raw.py`**: Identische Fixes wie weather-Backfill (`bidding_zone`
+  statt `location_key` als Partition-Filter).
+- **`airflow/Dockerfile`**: `pyiceberg` → `pyiceberg[pyarrow,s3fs]` (PyArrowFileIO + S3-Support für
+  direktes Iceberg-Schreiben ohne Trino).
+- **`.env` / `.env.example` / `docker-compose.yml`**: Airflow Variable `NESSIE_URI` ergänzt
+  (`http://nessie:19120/iceberg` – Iceberg REST API Endpunkt für PyIceberg).
+
 ### Iceberg Snapshot Expiration Policy Update (30.03.2026)
 
 - **DAG `iceberg_expire_snapshots.py` angepasst**:

@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir \
     duckdb \
     kaggle \
     pandas \
-    pyiceberg \
+    "pyiceberg[pyarrow,s3fs]" \
     requests \
     "apache-airflow-providers-trino>=6,<7" \
     "apache-airflow-providers-http>=6,<7" \

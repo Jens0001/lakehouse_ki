@@ -49,5 +49,7 @@ Thumbs.db
 
 #AI
 #Claude
-.claude
+.claude/
+.clinerules
+.instructions.md
 .clinerules

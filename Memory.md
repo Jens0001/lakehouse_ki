@@ -4,6 +4,20 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ---
 
+## PyIceberg / Nessie REST Catalog (04.05.2026)
+
+- **Nessie Core API** (Trino): `http://nessie:19120/api/v2` → konfiguriert in `trino/etc/catalog/iceberg.properties`
+- **Nessie Iceberg REST API** (PyIceberg): `http://nessie:19120/iceberg` → Airflow Variable `NESSIE_URI`
+  Beide Endpunkte zeigen auf dieselbe Nessie-Instanz, unterscheiden sich nur im Pfad-Präfix.
+- PyIceberg-Catalog-Config: `type=rest`, `py-io-impl=pyiceberg.io.pyarrow.PyArrowFileIO`,
+  `s3.path-style-access=true`, MinIO-Credentials aus den Standard-Airflow-Variablen
+- Idempotentes Schreiben: `table.overwrite(arrow_table, overwrite_filter=EqualTo("date_key", day_date))`
+  löscht bestehende Dateien für genau diesen Partition-Wert und schreibt neu.
+- `pyiceberg[pyarrow,s3fs]` Extras erforderlich (nicht plain `pyiceberg`); ohne `[pyarrow]` schlägt
+  `PyArrowFileIO`-Import fehl.
+
+---
+
 ## 🛠️ Gelöste Probleme
 
 ### Spotify-Pipeline: Kaggle-Artist-Name vs. Spotify-Artist-ID (24.03.2026)
