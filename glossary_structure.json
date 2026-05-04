@@ -1,0 +1,126 @@
+{
+  "glossaryName": "Lakehouse Energy & Weather Glossary",
+  "description": "Zentrales Business-Glossar basierend auf den dbt-Modellen des Lakehouse. Definiert die semantische Bedeutung von Wetter- und Energiepreiskennzahlen.",
+  "terms": [
+    {
+      "name": "Weather",
+      "description": "Alle Kennzahlen zur Beschreibung der atmosphärischen Bedingungen.",
+      "children": [
+        {
+          "name": "Temperature",
+          "description": "Thermische Messwerte.",
+          "children": [
+            {
+              "name": "Air Temperature",
+              "description": "Die gemessene Lufttemperatur in 2m Höhe über dem Boden [°C].",
+              "tags": ["Measure"]
+            },
+            {
+              "name": "Apparent Temperature",
+              "description": "Die gefühlte Temperatur unter Berücksichtigung von Wind und Feuchtigkeit [°C].",
+              "tags": ["Measure"]
+            }
+          ]
+        },
+        {
+          "name": "Atmosphere",
+          "description": "Messwerte zur Luftbeschaffenheit.",
+          "children": [
+            {
+              "name": "Relative Humidity",
+              "description": "Der relative Feuchtigkeitsgehalt der Luft in %.",
+              "tags": ["Attribute"]
+            },
+            {
+              "name": "Precipitation",
+              "description": "Die Menge des gefallenen Niederschlags in mm.",
+              "tags": ["Measure"]
+            }
+          ]
+        },
+        {
+          "name": "Wind",
+          "description": "Windbezogene Kennzahlen.",
+          "children": [
+            {
+              "name": "Wind Speed",
+              "description": "Die Geschwindigkeit des Windes in km/h.",
+              "tags": ["Measure"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Energy Markets",
+      "description": "Kennzahlen des Strommarktes und der Preisbildung.",
+      "children": [
+        {
+          "name": "Price Metrics",
+          "description": "Metriken zur Preisentwicklung am Strommarkt.",
+          "children": [
+            {
+              "name": "Day-Ahead Spot Price",
+              "description": "Der an der Börse gehandelte Strompreis für den Folgetag in EUR/MWh.",
+              "tags": ["Critical", "Measure"]
+            },
+            {
+              "name": "Price Volatility",
+              "description": "Die Standardabweichung der Preise, ein Maß für die Preisschwankungen innerhalb eines Zeitraums.",
+              "tags": ["Measure"]
+            },
+            {
+              "name": "Negative Price Hours",
+              "description": "Die Anzahl der Stunden, in denen der Strompreis negativ ist (oft durch Überproduktion erneuerbarer Energien).",
+              "tags": ["Critical", "Measure"]
+            }
+          ]
+        },
+        {
+          "name": "Market Geography",
+          "description": "Strukturen der Preiszonen.",
+          "children": [
+            {
+              "name": "Bidding Zone",
+              "description": "Die geografische Gebotszone (z.B. DE-LU), in der ein einheitlicher Preis gilt.",
+              "tags": ["Attribute"]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Spatiotemporal Context",
+      "description": "Dimensionen für Zeit- und Ortsbezüge.",
+      "children": [
+        {
+          "name": "Location",
+          "description": "Geografische Einordnung der Messstationen.",
+          "children": [
+            {
+              "name": "Coordinates",
+              "description": "Die geografische Breite (Latitude) und Länge (Longitude) eines Standorts.",
+              "tags": ["Attribute"]
+            }
+          ]
+        },
+        {
+          "name": "Time Analysis",
+          "description": "Zeitliche Kategorisierung für Tarif- und Lastanalysen.",
+          "children": [
+            {
+              "name": "Peak Hour",
+              "description": "Hochlast-Stunden (typischerweise Morgen- und Abendspitzen), die für Stromtarifvergleiche relevant sind.",
+              "tags": ["Attribute"]
+            },
+            {
+              "name": "Day Period",
+              "description": "Einteilung des Tages in Nacht, Morgen, Tag und Abend.",
+              "tags": ["Attribute"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

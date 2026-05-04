@@ -202,14 +202,17 @@
   - **Voraussetzung**: Trino + Iceberg muss `MERGE INTO` unterstützen (ab Trino 400+ und Iceberg v2 gegeben)
   - **Testplan**: Erst ein Modell umstellen (z.B. `s_weather_hourly`), mit `dbt run --select s_weather_hourly` testen, Zeilenanzahl vor/nach vergleichen, dann weitere Modelle schrittweise
 
-- [ ] **OpenLineage in Airflow aktivieren**
-  - **Problem**: OM-native Ingestion liefert Lineage aus dbt-Artefakten (manifest.json), aber keine **Runtime-Lineage** – d.h. es fehlt die Info, welcher konkrete DAG-Run welche Partition/Tabelle geschrieben hat, mit welchen Input-Datasets und wann.
-  - **Umsetzung** (minimaler Aufwand – eine Env-Variable + ein Package):
-    1. `apache-airflow-providers-openlineage` in `airflow/Dockerfile` installieren (pip install)
-    2. Env-Variable in `docker-compose.yml` unter `airflow.environment` ergänzen:
-       - `OPENLINEAGE_URL=http://openmetadata-server:8585/api/v1/lineage`
-       - `OPENLINEAGE_NAMESPACE=lakehouse_airflow`
-    3. OM empfängt dann automatisch OpenLineage-Events bei jedem Task-Run
+  - [x] **OpenLineage in Airflow aktivieren**
+    - **Problem**: OM-native Ingestion liefert Lineage aus dbt-Artefakten (manifest.json), aber keine **Runtime-Lineage** – d.h. es fehlt die Info, welcher konkrete DAG-Run welche Partition/Tabelle geschrieben hat, mit welchen Input-Datasets und wann.
+    - **Umsetzung** (minimaler Aufwand – eine Env-Variable + ein Package):
+      1. `apache-airflow-providers-openlineage` in `airflow/Dockerfile` installieren (pip install)
+      2. Env-Variable in `docker-compose.yml` unter `airflow.environment` ergänzt:
+         - `OPENLINEAGE_URL=http://openmetadata-server:8585`
+         - `OPENLINEAGE_NAMESPACE=lakehouse_airflow`
+      3. OM empfängt dann automatisch OpenLineage-Events bei jedem Task-Run
+    - [ ] **Explizite Lineage-Definition (inlets/outlets) in DAGs ergänzen**:
+      - `PythonOperator` kann keine Tabellen automatisch erkennen.
+      - In DAGs wie `energy_charts_to_raw.py` müssen `inlets` (S3-Pfad) und `outlets` (Iceberg-Tabelle) definiert werden, damit die Kanten in OM sichtbar werden.
   - **Was danach sichtbar wird**:
     - DAG `open_meteo_to_raw`: Input `open-meteo.com API` → Output `iceberg.raw.weather_hourly` (pro Run)
     - DAG `energy_charts_to_raw`: Input `api.energy-charts.info` → Output `iceberg.raw.energy_price_hourly`

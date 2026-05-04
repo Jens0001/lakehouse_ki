@@ -116,6 +116,7 @@ services:
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       # Development: DAG-Parser reload schneller (default: 30s) → schnelle Iteration ohne Restart
       - AIRFLOW__SCHEDULER__DAG_FILE_PROCESSOR_INTERVAL=5
+      - OPENLINEAGE_URL=http://openmetadata-server:8585
       # Logging: INFO-Level auf WARNING reduzieren
     #  - AIRFLOW__LOGGING__LOGGING_LEVEL=WARNING
     #  - AIRFLOW__LOGGING__FAB_LOGGING_LEVEL=WARNING

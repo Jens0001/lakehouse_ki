@@ -47,5 +47,7 @@ dbt/target/
 Thumbs.db
 
 
+#AI
 #Claude
 .claude
+.clinerules

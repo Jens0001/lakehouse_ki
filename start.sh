@@ -82,6 +82,20 @@ else
   echo "EXTERNAL_HOST zu .env hinzugefügt: ${EXTERNAL_HOST}"
 fi
 
+# OM_URL automatisch an EXTERNAL_HOST anpassen
+OM_URL_VAL="http://${EXTERNAL_HOST}:8585/api"
+if grep -q '^OM_URL=' "$ENV_FILE"; then
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    sed -i '' "s|^OM_URL=.*|OM_URL=${OM_URL_VAL}|" "$ENV_FILE"
+  else
+    sed -i "s|^OM_URL=.*|OM_URL=${OM_URL_VAL}|" "$ENV_FILE"
+  fi
+  echo "OM_URL in .env aktualisiert: ${OM_URL_VAL}"
+else
+  echo "OM_URL=${OM_URL_VAL}" >> "$ENV_FILE"
+  echo "OM_URL zu .env hinzugefügt: ${OM_URL_VAL}"
+fi
+
 # --- Pre-Start: Berechtigungen und Konfigurationen anpassen -------------------
 echo ""
 echo "Überprüfe und repariere Berechtigungen..."
@@ -211,6 +225,24 @@ if [ "$KEYCLOAK_READY" = true ]; then
   if [ "${EXTERNAL_HOST}" != "localhost" ]; then
     echo "Aktualisiere Keycloak Redirect URIs für ${EXTERNAL_HOST}..."
     bash init-scripts/update-keycloak-redirects.sh "${EXTERNAL_HOST}"
+  fi
+
+  # --- Business Glossary Ingestion ---------------------------------------------
+  echo ""
+  echo "Importiere Business Glossary..."
+  # Lade OM-Variablen aus .env, damit das Python-Skript sie sieht
+  if [ -f "$ENV_FILE" ]; then
+    export OM_URL=$(grep '^OM_URL=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || echo "http://localhost:8585/api")
+    export OM_TOKEN=$(grep '^OM_TOKEN=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || echo "")
+  fi
+
+  if [ -n "$OM_TOKEN" ] && [[ "$OM_TOKEN" != "CHANGE_ME"* ]]; then
+    python3 scripts/om_glossary_ingest.py glossary_structure.json || echo "  ⚠️  Glossary-Ingestion fehlgeschlagen (evtl. OM noch nicht voll bereit)"
+  else
+    echo "  ⚠️  OM_TOKEN fehlt oder ist noch ein Platzhalter (CHANGE_ME) in der .env."
+    echo "      Bitte generieren Sie ein Token in der OM-UI: Settings -> Users -> [User] -> Token"
+    echo "      Und tragen Sie es als OM_TOKEN in die .env ein."
+    echo "      Glossary-Ingestion wird übersprungen."
   fi
 fi
 

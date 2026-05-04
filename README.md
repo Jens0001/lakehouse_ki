@@ -423,6 +423,24 @@ docker run --rm \
   bash -c "/home/airflow/.local/bin/metadata ingest -c /tmp/dbt.yaml"
 ```
 
+### 📚 Business Glossary Ingestion
+Zusätzlich zur technischen Ingestion gibt es ein Business-Glossar, das die semantische Bedeutung der Daten definiert.
+
+**Automatisierung:**
+Die Ingestion ist in `start.sh` integriert. Beim Start des Stacks wird geprüft, ob ein gültiger `OM_TOKEN` in der `.env` vorhanden ist. Wenn ja, wird das Glossar automatisch aus der `glossary_structure.json` importiert. Die `OM_URL` wird dabei automatisch an den `EXTERNAL_HOST` angepasst.
+
+**Manuelle Ausführung (für Updates):**
+Falls Sie das Glossar aktualisiert haben und es ohne Neustart des Stacks importieren möchten:
+```bash
+# OM_URL wird meist schon in der .env stehen, ansonsten:
+export OM_URL="http://localhost:8585/api" 
+export OM_TOKEN="dein_token_hier"
+
+# Glossar importieren
+python3 scripts/om_glossary_ingest.py glossary_structure.json
+```
+Das Skript liest die `glossary_structure.json` und erstellt die hierarchischen Business-Begriffe direkt in OpenMetadata.
+
 ### Schedules ändern
 
 Schedules können per API geändert werden (Token aus `docker logs lakehouse_openmetadata_server` oder als Admin-Login-Token):
@@ -511,5 +529,5 @@ Alle verwendeten Komponenten folgen ihren eigenen Open-Source-Lizenzen.
 ---
 
 **Projekt-Status**: 🟡 Laufend (In Development)  
-**Letzte Aktualisierung**: 23. März 2026  
-**Version**: 0.4.0-alpha (OpenMetadata Governance Katalog + vollautomatische Ingestion)
+**Letzte Aktualisierung**: 17. April 2026  
+**Version**: 0.4.1-alpha (OpenMetadata Governance Katalog + automatisierte URL-Konfiguration & Glossary-Integration)

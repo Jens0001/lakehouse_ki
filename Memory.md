@@ -267,6 +267,26 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ## 🔧 Technische Erkenntnisse
 
+### Informationsanlieferung an OpenMetadata (17.04.2026)
+
+Die Anlieferung von Metadaten erfolgt über zwei komplementäre Wege:
+
+1. **Pull-basierte Ingestion (Technische Metadaten)**:
+   - Ein dedizierter `openmetadata-ingestion` Container (separater Airflow) führt Pipelines aus.
+   - **dbt-Connector**: Liest `manifest.json` und `catalog.json` aus `./dbt/target`. Damit werden Beschreibungen, Tags und die statische Lineage (Modell-Abhängigkeiten) importiert.
+   - **Trino/Airflow-Connectors**: Crawlen Schemata, Tabellen und DAG-Strukturen direkt über DB-Connections oder APIs.
+
+2. **Push-basierte Lineage (Operative Runtime-Lineage)**:
+    - Über das **OpenLineage-Protokoll** senden die Runtime-Systeme (Airflow, dbt) Events an den OM-Server (`/api/v1/lineage`).
+    - **Voraussetzung**: `OPENLINEAGE_URL` muss im Airflow-Environment gesetzt sein.
+    - **Problem bei PythonOperators**: Diese können keine Tabellen automatisch erkennen. Hier müssen `inlets` (Inputs) und `outlets` (Outputs) explizit im Operator definiert werden, damit die Kanten in der Lineage-Grafik erscheinen.
+
+3. **Semantische Metadaten (Business Glossary)**:
+    - Während technische Metadaten automatisch gecrawlt werden, erfordert das Business-Glossar eine kuratierte Struktur.
+    - **Ansatz**: Definition der Begriffe und Hierarchien in einer `glossary_structure.json`. Ein Python-Skript (`om_glossary_ingest.py`) importiert diese Struktur via API in OpenMetadata.
+    - **Automatisierung**: Die `OM_URL` wird in `start.sh` automatisch an den `EXTERNAL_HOST` angepasst. Der `OM_TOKEN` muss einmalig manuell aus der OM-UI hinterlegt werden, um die API-Authentifizierung zu ermöglichen.
+
+
 ### Keycloak OIDC Redirect URIs
 
 **Issue**: OAuth2 Callbacks schlagen fehl, wenn Redirect URIs nicht genau stimmen
