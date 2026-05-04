@@ -142,6 +142,8 @@ services:
       - AIRFLOW_VAR_WEATHER_LOCATION_KEY=${WEATHER_LOCATION_KEY}
       - AIRFLOW_VAR_ENERGY_CHARTS_BIDDING_ZONE=${ENERGY_CHARTS_BIDDING_ZONE}
       - AIRFLOW_VAR_NESSIE_URI=${NESSIE_URI}
+      # Trino Connection (AIRFLOW_CONN_ Präfix wird automatisch erkannt)
+      - AIRFLOW_CONN_TRINO_DEFAULT={"conn_type":"trino","host":"trino","login":"trino_user","port":8080,"schema":"default","extra":{"catalog":"iceberg"}}
       # Kaggle API Credentials (für spotify_kaggle_download DAG)
       - AIRFLOW_VAR_KAGGLE_USERNAME=${KAGGLE_USERNAME}
       - AIRFLOW_VAR_KAGGLE_API_KEY=${KAGGLE_API_KEY}
