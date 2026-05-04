@@ -4,6 +4,17 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ---
 
+## OpenMetadata Elasticsearch cgroupv2 Bug (04.05.2026)
+
+- **Problem**: Elasticsearch 7.16.3 stürzt beim Start mit `NullPointerException` ab unter Linux mit cgroupv2
+- **Stack Trace**: `Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "anyController" is null`
+- **Ursache**: Java 11 im ES-Image versucht, cgroup-Speichermetriken zu lesen, aber der Controller ist nicht verfügbar
+- **Lösung**: `-XX:-UseCGroupMemoryMetricForLimits` zu `ES_JAVA_OPTS` in `docker-compose.yml` hinzufügen
+- **Betroffene Services**: `openmetadata-es` (Elasticsearch 7.16.3)
+- **Dokumentation**: Siehe auch Changelog.md und Tasks.md
+
+---
+
 ## PyIceberg / Nessie REST Catalog (04.05.2026)
 
 - **Nessie Core API** (Trino): `http://nessie:19120/api/v2` → konfiguriert in `trino/etc/catalog/iceberg.properties`

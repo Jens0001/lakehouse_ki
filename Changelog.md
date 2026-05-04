@@ -4,6 +4,17 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### OpenMetadata Elasticsearch cgroupv2 Bug Fix (04.05.2026)
+
+- **`docker-compose.yml`**: `-XX:-UseCGroupMemoryMetricForLimits` zu `ES_JAVA_OPTS` des
+  `openmetadata-es` Services hinzugefügt
+- **Ursache**: Elasticsearch 7.16.3 (Java 11) stürzt beim Start ab mit
+  `NullPointerException: Cannot invoke jdk.internal.platform.CgroupInfo.getMountPoint()`
+  unter Linux mit cgroupv2 – die JVM kann die cgroup-Speicherlimits nicht korrekt lesen
+- **Betroffener Service**: `openmetadata-es` (Elasticsearch)
+- **Fix**: JVM-Flag `-XX:-UseCGroupMemoryMetricForLimits` deaktiviert das Lesen von
+  cgroup-Speichermetriken → Elasticsearch startet korrekt
+
 ### PyIceberg Bulk-Write DAG + Backfill-Bug-Fixes (04.05.2026)
 
 - **Neuer DAG `energy_backfill_pyarrow.py`**: Schreibt Energy-Preisdaten via PyArrow/PyIceberg direkt

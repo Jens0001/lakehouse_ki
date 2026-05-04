@@ -1,5 +1,12 @@
 # Tasks - Lakehouse KI
 
+## Gelöst
+
+### OpenMetadata Elasticsearch cgroupv2 Bug (04.05.2026)
+- [x] **Elasticsearch Start-Fix**: `-XX:-UseCGroupMemoryMetricForLimits` zu `ES_JAVA_OPTS` in `docker-compose.yml` hinzugefügt
+- **Problem**: ES 7.16.3 stürzte mit `NullPointerException` bei cgroupv2-Systemen ab
+- **Betroffen**: Service `openmetadata-es`
+
 ## Offen
 
 ### Datenquelle 1: Open-Meteo – nächste Schritte
