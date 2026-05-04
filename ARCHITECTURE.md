@@ -1074,7 +1074,8 @@ gelesen (Scheduler, Task-Executor, DAG-Processor, API-Server). Sie akzeptiert ei
 In `docker-compose.yml` mit Variable-Substitution aus `.env`:
 
 ```yaml
-- AIRFLOW__OPENLINEAGE__TRANSPORT={"type": "http", "url": "http://openmetadata-server:8585", "endpoint": "/api/v1/openlineage/lineage", "auth": {"type": "api_key", "apiKey": "${OPENMETADATA_INGESTION_BOT_TOKEN}", "apiKeyPrefix": "Bearer"}}
+# Einfache Anführungszeichen nötig – JSON-{} würden sonst als YAML-Block-Mapping geparst
+- 'AIRFLOW__OPENLINEAGE__TRANSPORT={"type": "http", "url": "http://openmetadata-server:8585", "endpoint": "/api/v1/openlineage/lineage", "auth": {"type": "api_key", "apiKey": "${OPENMETADATA_INGESTION_BOT_TOKEN}", "apiKeyPrefix": "Bearer"}}'
 ```
 
 ### Warum nicht OPENLINEAGE_URL allein?
