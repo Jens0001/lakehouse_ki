@@ -124,6 +124,7 @@ services:
       # Development: DAG-Parser reload schneller (default: 30s) → schnelle Iteration ohne Restart
       - AIRFLOW__SCHEDULER__DAG_FILE_PROCESSOR_INTERVAL=5
       - OPENLINEAGE_URL=http://openmetadata-server:8585
+      - OPENLINEAGE_API_KEY=${OPENMETADATA_INGESTION_BOT_TOKEN}
       # Logging: INFO-Level auf WARNING reduzieren
     #  - AIRFLOW__LOGGING__LOGGING_LEVEL=WARNING
     #  - AIRFLOW__LOGGING__FAB_LOGGING_LEVEL=WARNING

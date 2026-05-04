@@ -282,6 +282,68 @@ if [ "$KEYCLOAK_READY" = true ]; then
   fi
 fi
 
+# --- OpenMetadata: ingestion-bot Token für OpenLineage holen ----------------
+echo ""
+echo "Warte auf OpenMetadata Health..."
+OM_READY=false
+for i in $(seq 1 36); do
+  if curl -sf "http://localhost:8585/api/v1/system/version" >/dev/null 2>&1; then
+    echo "OpenMetadata ist bereit."
+    OM_READY=true
+    break
+  fi
+  echo "  Warte... ($((i*5))s)"
+  sleep 5
+done
+
+if [ "$OM_READY" = true ]; then
+  echo "Hole ingestion-bot JWT-Token von OpenMetadata..."
+
+  ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8585/api/v1/users/login" \
+    -H "Content-Type: application/json" \
+    -d '{"email":"admin@open-metadata.org","password":"admin"}' | \
+    python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('jwtToken',''))" 2>/dev/null || true)
+
+  if [ -z "$ADMIN_TOKEN" ]; then
+    echo "  ⚠️  Login fehlgeschlagen – ingestion-bot Token wird übersprungen."
+  else
+    BOT_TOKEN=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+      "http://localhost:8585/api/v1/bots/name/ingestion-bot" | \
+      python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+token = (d.get('botUser') or {})
+# Token kann direkt im botUser oder in authenticationMechanism liegen
+for key in ['jwtToken', 'JWTToken']:
+    if key in token:
+        print(token[key]); sys.exit()
+config = (token.get('authenticationMechanism') or {}).get('config') or {}
+for key in ['JWTToken', 'jwtToken']:
+    if key in config:
+        print(config[key]); sys.exit()
+" 2>/dev/null || true)
+
+    if [ -z "$BOT_TOKEN" ]; then
+      echo "  ⚠️  ingestion-bot Token konnte nicht gelesen werden."
+    else
+      OLD_TOKEN=$(grep '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || true)
+      if [ "$OLD_TOKEN" != "$BOT_TOKEN" ]; then
+        if grep -q '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE"; then
+          sed_inplace "s|^OPENMETADATA_INGESTION_BOT_TOKEN=.*|OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}|" "$ENV_FILE"
+        else
+          echo "OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}" >> "$ENV_FILE"
+        fi
+        echo "  ✓ ingestion-bot Token in .env aktualisiert – starte Airflow neu..."
+        docker compose up -d airflow
+      else
+        echo "  ✓ ingestion-bot Token unverändert, kein Neustart nötig."
+      fi
+    fi
+  fi
+else
+  echo "  ⚠️  OpenMetadata nicht erreichbar – ingestion-bot Token wird übersprungen."
+fi
+
 # --- Hinweise ----------------------------------------------------------------
 echo ""
 echo "=== Stack gestartet ==="
