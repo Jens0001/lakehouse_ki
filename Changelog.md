@@ -6,20 +6,23 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ### OpenMetadata Elasticsearch cgroupv2 Bug Fix (04.05.2026)
 
-- **`docker-compose.yml`**: `ES_JAVA_OPTS` auf leer gesetzt, Volume-Mount für
-  `elasticsearch/jvm.options` hinzugefügt
-- **`elasticsearch/jvm.options`**: Neue Datei mit JVM-Optionen (-Xms512m, -Xmx512m, -XX:+UseG1GC)
+- **`elasticsearch/elasticsearch-wrapper.sh`**: Neues Wrapper-Script für das originale
+  `elasticsearch` Binary – ersetzt den JvmOptionsParser-Aufruf mit `-Des.cgroups.hierarchy.override=/`
+- **`docker-compose.yml`**: Volume-Mount für Wrapper-Script, `entrypoint` mit `chmod +x` hinzugefügt
+  (stellt sicher, dass das gemountete Script unter Windows/git ausführbar ist)
 - **Ursache**: Elasticsearch 7.16.3 (Java 11) stürzt beim Start ab mit
   `NullPointerException: Cannot invoke jdk.internal.platform.CgroupInfo.getMountPoint()`
   unter Linux mit cgroupv2 (Kernel 6.17+, Ubuntu 25.10) – der `JvmOptionsParser` im ES-Image
-  liest cgroup-Speichermetriken beim Parsen von `ES_JAVA_OPTS` und crasht, wenn der Controller
-  nicht verfügbar ist
+  liest cgroup-Speichermetriken und crasht, wenn der Controller nicht verfügbar ist
 - **Betroffener Service**: `openmetadata-es` (Elasticsearch)
-- **Erster Fix-Versuch**: `-XX:-UseCGroupMemoryMetricForLimits` → **fehlgeschlagen**,
-  da diese Option erst in Java 17+ existiert, ES 7.16.3 verwendet Java 11
-- **Endgültiger Fix**: `ES_JAVA_OPTS` leer lassen und Speicherlimits in eine gemountete
-  `jvm.options` Datei auslagern → der `JvmOptionsParser` wird nicht aufgerufen,
-  JVM liest Optionen direkt aus der Datei
+- **Fix-Versuch 1 (fehlgeschlagen)**: `-XX:-UseCGroupMemoryMetricForLimits` →
+  `Unrecognized VM option` – diese Option existiert erst ab Java 17, ES 7.16.3 verwendet Java 11
+- **Fix-Versuch 2 (fehlgeschlagen)**: `ES_JAVA_OPTS` leer + `jvm.options` gemountet →
+  wirkungslos, da der `JvmOptionsParser` als separater Java-Prozess aufgerufen wird
+  UND CRASHT BEVOR die jvm.options Datei gelesen wird
+- **Endgültiger Fix**: Wrapper-Script ersetzt das originale `elasticsearch` Binary.
+  Der Wrapper ruft den JvmOptionsParser mit `-Des.cgroups.hierarchy.override=/` auf,
+  was die cgroup-Hierarchie manuell setzt und den NullPointerException verhindert.
 
 ### PyIceberg Bulk-Write DAG + Backfill-Bug-Fixes (04.05.2026)
 

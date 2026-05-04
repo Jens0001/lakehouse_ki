@@ -8,16 +8,24 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 - **Problem**: Elasticsearch 7.16.3 stürzt beim Start mit `NullPointerException` ab unter Linux mit cgroupv2
 - **Stack Trace**: `Cannot invoke "jdk.internal.platform.CgroupInfo.getMountPoint()" because "anyController" is null`
-- **Ursache**: Der `JvmOptionsParser` im ES-Image liest cgroup-Speichermetriken beim Parsen von `ES_JAVA_OPTS`.
-  Unter Ubuntu 25.10 mit Kernel 6.17 und cgroupv2 (`nsdelegate,memory_recursiveprot`) ist der Controller
-  nicht im erwarteten Format verfügbar → NullPointerException
-- **Erster Fix fehlgeschlagen**: `-XX:-UseCGroupMemoryMetricForLimits` existiert erst ab Java 17.
-  ES 7.16.3 verwendet Java 11 → `Unrecognized VM option`
-- **Endgültiger Fix**:
-  - `ES_JAVA_OPTS` auf leeren String gesetzt in `docker-compose.yml`
-  - Volume-Mount für `elasticsearch/jvm.options` hinzugefügt
-  - `elasticsearch/jvm.options` enthält `-Xms512m`, `-Xmx512m`, `-XX:+UseG1GC`
-  - JVM liest Optionen direkt aus der Datei, `JvmOptionsParser` wird nicht aufgerufen
+- **Ursache**: Der `JvmOptionsParser` im ES-Image (aufgerufen als separater Java-Prozess) liest
+  cgroup-Speichermetriken. Unter Ubuntu 25.10 mit Kernel 6.17 und cgroupv2
+  (`nsdelegate,memory_recursiveprot`) ist der Controller nicht im erwarteten Format verfügbar.
+- **Fix-Versuch 1 (fehlgeschlagen)**: `-XX:-UseCGroupMemoryMetricForLimits` →
+  `Unrecognized VM option` – existiert erst ab Java 17, ES 7.16.3 verwendet Java 11
+- **Fix-Versuch 2 (fehlgeschlagen)**: `ES_JAVA_OPTS` leer + `jvm.options` gemountet →
+  wirkungslos, da der `JvmOptionsParser` crasht BEVOR die jvm.options Datei gelesen wird.
+  Der Parser wird als separater Java-Prozess aufgerufen:
+  `"$JAVA" -cp "$ES_CLASSPATH" org.elasticsearch.tools.launchers.JvmOptionsParser ...`
+- **Endgültiger Fix**: Wrapper-Script `elasticsearch/elasticsearch-wrapper.sh` ersetzt das
+  originale `elasticsearch` Binary. Der Wrapper ruft den JvmOptionsParser mit
+  `-Des.cgroups.hierarchy.override=/` auf – das setzt die cgroup-Hierarchie manuell
+  und verhindert den NullPointerException.
+- **Technische Details**:
+  - Das System-Property `es.cgroups.hierarchy.override` wird vom ES-cgroup-Reader verwendet
+  - Der Wert `/` zeigt auf die root-cgroup, die immer existiert
+  - Der Wrapper source't `elasticsearch-env` für JAVA/XSHARE/ES_CLASSPATH
+  - docker-compose.yml: `command: ["bash", "/docker-entrypoint.sh", "eswrapper"]`
 - **Betroffene Services**: `openmetadata-es` (Elasticsearch 7.16.3)
 - **Host-System**: Ubuntu 25.10, Kernel 6.17.0-7-generic, Docker cgroupv2, systemd Driver
 - **Dokumentation**: Siehe auch Changelog.md und Tasks.md
