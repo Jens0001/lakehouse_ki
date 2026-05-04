@@ -53,16 +53,18 @@ if [[ $CHECK_KEYSTORE = true ]] && \
   fi
 fi
 
-# JvmOptionsParser AUFRUF – mit -Des.cgroups.hierarchy.override=/ FIX
-# Das originale Script ruft den Parser OHNE JVM-Flags auf, was unter cgroupv2 crasht.
-# Hier wird der cgroup-hierarchy override explizit gesetzt.
-ES_JAVA_OPTS=`export ES_TMPDIR; "$JAVA" "$XSHARE" -Des.cgroups.hierarchy.override=/ -cp "$ES_CLASSPATH" org.elasticsearch.tools.launchers.JvmOptionsParser "$ES_PATH_CONF" "$ES_HOME/plugins"`
+# JvmOptionsParser AUFRUF – mit cgroupv2 Fix
+# -XX:-UseContainerSupport: Deaktiviert die JVM-eigene Container-Erkennung (cgroupv2),
+#   die unter WSL2/Linux 5.x+ mit NullPointerException crasht (anyController == null).
+# -Des.cgroups.hierarchy.override=/: ES-seitiger Override für cgroup-Hierarchie.
+ES_JAVA_OPTS=`export ES_TMPDIR; "$JAVA" "$XSHARE" -XX:-UseContainerSupport -Des.cgroups.hierarchy.override=/ -cp "$ES_CLASSPATH" org.elasticsearch.tools.launchers.JvmOptionsParser "$ES_PATH_CONF" "$ES_HOME/plugins"`
 
 # manual parsing to find out, if process should be detached
 if [[ $DAEMONIZE = false ]]; then
   exec \
     "$JAVA" \
     "$XSHARE" \
+    -XX:-UseContainerSupport \
     $ES_JAVA_OPTS \
     -Des.path.home="$ES_HOME" \
     -Des.path.conf="$ES_PATH_CONF" \
@@ -76,6 +78,7 @@ else
   exec \
     "$JAVA" \
     "$XSHARE" \
+    -XX:-UseContainerSupport \
     $ES_JAVA_OPTS \
     -Des.path.home="$ES_HOME" \
     -Des.path.conf="$ES_PATH_CONF" \
