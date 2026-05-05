@@ -323,7 +323,9 @@ services:
   # OM indiziert alle Assets (Tabellen, Spalten, Pipelines, Tags) in ES –
   # die Volltextsuche in der UI läuft vollständig über ES-Queries.
   # single-node: kein Cluster-Setup nötig für lokale Entwicklung.
-  # Xms/Xmx=512m: RAM schonen neben dem restlichen Stack (gesamt ≥12 GB empfohlen).
+  # mem_limit: Begrenzt den OS Page-Cache, der sonst unbegrenzt wächst und
+  #   den Großteil des RAM belegt (docker stats zählt Page-Cache mit).
+  # heap.options: Überschreibt den ES-Default (1g) mit 512m via jvm.options.d.
   # xpack.security=false: deaktiviert TLS/Auth in ES 8.x für lokalen Betrieb.
   # ACHTUNG: ES 7.x ist Pflicht! OM 1.12.3 bündelt elasticsearch-java 9.2.4 (shaded),
   # der Vendor-Header "Content-Type: application/vnd.elasticsearch+json;compatible-with=8"
@@ -332,6 +334,8 @@ services:
   openmetadata-es:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.16.3
     container_name: lakehouse_openmetadata_es
+    mem_limit: 2g
+    memswap_limit: 2g
     environment:
       - discovery.type=single-node
       # ES_JAVA_OPTS leer – cgroupv2 Fix ist im elasticsearch-wrapper.sh
@@ -339,6 +343,8 @@ services:
       - openmetadata_es_data:/usr/share/elasticsearch/data
       # Wrapper-Script wird an einen temporären Ort gemountet und dann kopiert
       - ./elasticsearch/elasticsearch-wrapper.sh:/opt/elasticsearch-wrapper.sh:ro
+      # Überschreibt den ES-Default-Heap (1g) mit 512m für lokale Entwicklung
+      - ./elasticsearch/jvm.options.d/heap.options:/usr/share/elasticsearch/config/jvm.options.d/heap.options:ro
     # Kopiert das Wrapper-Script an die Zielposition und setzt Execute-Berechtigung
     entrypoint: ["sh", "-c", "cp /opt/elasticsearch-wrapper.sh /usr/share/elasticsearch/bin/elasticsearch && chmod +x /usr/share/elasticsearch/bin/elasticsearch && /usr/local/bin/docker-entrypoint.sh eswrapper"]
     healthcheck:
