@@ -53,6 +53,13 @@ CHARTS_KEY = "landing/csv/spotify/charts/spotify_charts.csv"
 RAW_TRACKS_TABLE = "iceberg.raw.spotify_tracks"
 RAW_CHARTS_TABLE = "iceberg.raw.spotify_charts"
 
+# Regionfilter für Charts – reduziert 26 Mio. auf ~1-2 Mio. Zeilen.
+# Für den vollständigen Load aller Regionen: spotify_charts_pyarrow_load DAG verwenden.
+CHARTS_REGIONS_FILTER = {
+    "Germany", "Austria", "Switzerland",  # DACH
+    "United States", "Global",
+}
+
 DEFAULT_ARGS = {
     "owner": "airflow",
     "retries": 1,
@@ -305,6 +312,8 @@ def load_charts_to_raw(**_):
             for row in reader:
                 chart_date = row.get("date", "")
                 if not chart_date:
+                    continue
+                if row.get("region") not in CHARTS_REGIONS_FILTER:
                     continue
 
                 values = (
