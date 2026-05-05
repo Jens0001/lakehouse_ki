@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import tempfile
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -228,7 +230,7 @@ def load_tracks_to_raw(**_):
 # ---------------------------------------------------------------------------
 def load_charts_to_raw(**_):
     """
-    Liest die Charts-CSV aus MinIO (in Chunks) und schreibt sie per Trino INSERT in die Raw-Tabelle.
+    Liest die Charts-CSV aus MinIO und schreibt sie per Trino INSERT in die Raw-Tabelle.
 
     Erwartete CSV-Spalten (Kaggle Spotify Charts Dataset):
       title, rank, date, artist, url, region, chart, trend, streams
@@ -236,11 +238,11 @@ def load_charts_to_raw(**_):
     Hinweis: 'streams' kann leer sein (vor allem bei Viral-50-Charts).
     'chart' ist 'top200' oder 'viral50'.
 
-    Chunks: Datei wird in 10MB-Blöcken gelesen, um OOM zu vermeiden
+    Die Datei wird zuerst vollständig in eine temp-Datei heruntergeladen, bevor
+    die Verarbeitung beginnt. Das entkoppelt die S3-Verbindung von den Trino-Inserts
+    und verhindert Connection-Resets bei langen Verarbeitungszeiten.
     """
     s3 = _get_minio_client()
-    obj = s3.get_object(Bucket=BUCKET, Key=CHARTS_KEY)
-
     hook = TrinoHook(trino_conn_id="trino_default")
 
     # Tabelle anlegen, falls noch nicht vorhanden
@@ -275,77 +277,50 @@ def load_charts_to_raw(**_):
 
     loaded_at = datetime.utcnow().isoformat(sep=" ", timespec="seconds")
 
-    # Lese CSV in Chunks (10MB) um OOM zu vermeiden
-    chunk_size = 10 * 1024 * 1024  # 10MB
-    buffer = ""
-    row_count = 0
-    rows = []
+    # Datei zuerst komplett herunterladen – S3-Verbindung wird danach geschlossen,
+    # bevor die Trino-Inserts starten.
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".csv")
+    try:
+        os.close(tmp_fd)
+        print(f"Lade {CHARTS_KEY} nach {tmp_path} herunter ...")
+        s3.download_file(BUCKET, CHARTS_KEY, tmp_path)
+        print("Download abgeschlossen, starte Verarbeitung ...")
 
-    for chunk in iter(lambda: obj["Body"].read(chunk_size), b''):
-        buffer += chunk.decode("utf-8", errors="replace")
+        rows = []
+        row_count = 0
 
-        # Teile Buffer in Zeilen auf
-        lines = buffer.split('\n')
-        # Behälte die letzte unvollständige Zeile für die nächste Iteration
-        buffer = lines[-1]
+        with open(tmp_path, newline="", encoding="utf-8", errors="replace") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                chart_date = row.get("date", "")
+                if not chart_date:
+                    continue
 
-        # Verarbeite alle vollständigen Zeilen
-        reader = csv.DictReader(lines[:-1])
-        for row in reader:
-            chart_date = row.get("date", "")
-            if not chart_date:
-                continue
+                values = (
+                    f"(DATE '{chart_date}', "
+                    f"{_sql_value(row.get('rank'), 'integer')}, "
+                    f"{_sql_value(row.get('title'))}, "
+                    f"{_sql_value(row.get('artist'))}, "
+                    f"{_sql_value(row.get('streams'), 'integer')}, "
+                    f"{_sql_value(row.get('region'))}, "
+                    f"{_sql_value(row.get('chart'))}, "
+                    f"{_sql_value(row.get('trend'))}, "
+                    f"{_sql_value(row.get('url'))}, "
+                    f"'{source_file}', "
+                    f"TIMESTAMP '{loaded_at}')"
+                )
+                rows.append(values)
+                row_count += 1
 
-            values = (
-                f"(DATE '{chart_date}', "
-                f"{_sql_value(row.get('rank'), 'integer')}, "
-                f"{_sql_value(row.get('title'))}, "
-                f"{_sql_value(row.get('artist'))}, "
-                f"{_sql_value(row.get('streams'), 'integer')}, "
-                f"{_sql_value(row.get('region'))}, "
-                f"{_sql_value(row.get('chart'))}, "
-                f"{_sql_value(row.get('trend'))}, "
-                f"{_sql_value(row.get('url'))}, "
-                f"'{source_file}', "
-                f"TIMESTAMP '{loaded_at}')"
-            )
-            rows.append(values)
-            row_count += 1
+                if len(rows) >= 500:
+                    hook.run(f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}")
+                    rows = []
 
-            # Batch-Insert in Blöcken von 100 Rows
-            if len(rows) >= 100:
-                insert_sql = f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}"
-                hook.run(insert_sql)
-                rows = []
+        if rows:
+            hook.run(f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}")
 
-    # Verarbeite letzte Zeile, falls vorhanden
-    if buffer.strip():
-        reader = csv.DictReader([buffer])
-        for row in reader:
-            chart_date = row.get("date", "")
-            if not chart_date:
-                continue
-
-            values = (
-                f"(DATE '{chart_date}', "
-                f"{_sql_value(row.get('rank'), 'integer')}, "
-                f"{_sql_value(row.get('title'))}, "
-                f"{_sql_value(row.get('artist'))}, "
-                f"{_sql_value(row.get('streams'), 'integer')}, "
-                f"{_sql_value(row.get('region'))}, "
-                f"{_sql_value(row.get('chart'))}, "
-                f"{_sql_value(row.get('trend'))}, "
-                f"{_sql_value(row.get('url'))}, "
-                f"'{source_file}', "
-                f"TIMESTAMP '{loaded_at}')"
-            )
-            rows.append(values)
-            row_count += 1
-
-    # Rest-Batch schreiben
-    if rows:
-        insert_sql = f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}"
-        hook.run(insert_sql)
+    finally:
+        os.unlink(tmp_path)
 
     print(f"✅ {row_count} Chart-Einträge in {RAW_CHARTS_TABLE} geschrieben (Quelle: {CHARTS_KEY})")
 
