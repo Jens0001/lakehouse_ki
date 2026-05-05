@@ -40,6 +40,9 @@ services:
     environment:
       - NESSIE_VERSION_STORE_TYPE=ROCKSDB
       - QUARKUS_LOG_LEVEL=WARN
+      - QUARKUS_CONFIG_LOCATIONS=/opt/nessie/conf/application.properties
+      - QUARKUS_OIDC_ENABLED=false
+      - QUARKUS_OPENTELEMETRY_ENABLED=false
     volumes:
       - ./catalog/conf:/opt/nessie/conf
     networks:
