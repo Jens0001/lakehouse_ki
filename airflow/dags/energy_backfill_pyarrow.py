@@ -103,7 +103,12 @@ def _get_or_create_table(catalog):
         if NAMESPACE not in existing_namespaces:
             catalog.create_namespace(NAMESPACE)
         return catalog.create_table(identifier, schema=schema, partition_spec=partition_spec)
-    return catalog.load_table(identifier)
+    try:
+        return catalog.load_table(identifier)
+    except Exception as e:
+        print(f"⚠️  load_table fehlgeschlagen ({e}), Tabelle wird neu erstellt.")
+        catalog.drop_table(identifier)
+        return catalog.create_table(identifier, schema=schema, partition_spec=partition_spec)
 
 
 def list_landing_files(**context):
