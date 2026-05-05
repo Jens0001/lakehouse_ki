@@ -40,9 +40,15 @@ services:
     environment:
       - NESSIE_VERSION_STORE_TYPE=ROCKSDB
       - QUARKUS_LOG_LEVEL=WARN
-      - QUARKUS_CONFIG_LOCATIONS=/opt/nessie/conf/application.properties
       - QUARKUS_OIDC_ENABLED=false
-      - QUARKUS_OPENTELEMETRY_ENABLED=false
+      # Nessie Catalog – aktiviert die Iceberg REST API unter /iceberg/v1/
+      - NESSIE_CATALOG_DEFAULT__WAREHOUSE=warehouse
+      - NESSIE_CATALOG_WAREHOUSES_WAREHOUSE_LOCATION=s3://lakehouse/
+      - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_REGION=us-east-1
+      - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_ENDPOINT=http://minio:9000
+      - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_PATH__STYLE__ACCESS=true
+      - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_ACCESS__KEY_NAME=minioadmin
+      - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_ACCESS__KEY_SECRET=minioadmin123
     volumes:
       - ./catalog/conf:/opt/nessie/conf
     networks:
