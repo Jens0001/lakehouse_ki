@@ -180,16 +180,18 @@ def backfill_to_raw(**context):
             print(f"⚠️  [{idx}/{total_months}] {month} – keine Rows, übersprungen.")
             continue
 
-        # DELETE nur für die konkret zu ladenden Tage (idempotent für Retries)
-        for day in sorted(days_in_batch):
-            hook.run(f"""
-                DELETE FROM {RAW_TABLE}
-                WHERE date_key = DATE '{day}'
-                  AND location_key = '{location_key}'
-            """)
+        # Batched DELETE mit IN-Klausel (eine IN-Liste pro Monat, ~31 Datums-Literale)
+        # Vermeidet sqlparse Token-Limit-Error bei vielen einzelnen DELETEs
+        days_in_batch_sorted = sorted(days_in_batch)
+        date_in_clause = ", ".join(f"DATE '{d}'" for d in days_in_batch_sorted)
+        hook.run(f"""
+            DELETE FROM {RAW_TABLE}
+            WHERE date_key IN ({date_in_clause})
+              AND location_key = '{location_key}'
+        """)
 
-        # Batched INSERT (100 Zeilen je Statement)
-        batch_size = 5000
+        # Batched INSERT (100 Zeilen je Statement, um SQLParseError zu vermeiden)
+        batch_size = 100
         for i in range(0, len(rows), batch_size):
             batch = rows[i : i + batch_size]
             hook.run(f"INSERT INTO {RAW_TABLE} VALUES {', '.join(batch)}")

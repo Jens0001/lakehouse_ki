@@ -143,6 +143,27 @@ Korrekter Aufruf: `OM_TOKEN=<token> python3 scripts/om_glossary_ingest.py glossa
   Der Wrapper ruft den JvmOptionsParser mit `-Des.cgroups.hierarchy.override=/` auf,
   was die cgroup-Hierarchie manuell setzt und den NullPointerException verhindert.
 
+### Backfill-Bug: SQLParseError Fix – batch DELETEs + batch_size reduziert (05.05.2026)
+
+**Problem**: `weather_backfill_landing_to_raw.py` und `energy_backfill_landing_to_raw.py`
+werfen `SQLParseError: Maximum number of tokens exceeded (10000)`, wenn die Ziel-Tabelle
+komplett leer ist. Der Fehler tritt im `DELETE`-Teil auf, nicht im `INSERT`.
+
+**Ursache**: Das DELETE hatte pro Tag ein **einzelnes Statement** (`DELETE WHERE date_key = DATE '...' AND ...`).
+Bei mehreren Jahren × ~31 Tage = 250+ DELETE-Statements erzeugt der zusammengeführte SQL-String
+mehr Tokens als das sqlparse-Limit von 10.000 erlaubt.
+
+**Fix**:
+- **Batch DELETE mit IN-Klausel**: Pro Monat ein einziger `DELETE WHERE date_key IN (DATE '...', ...) AND ...`.
+  ~31 Datums-Literale pro IN-Liste → ca. 660 Tokens, weit unter dem Limit.
+- **batch_size** auf **100** reduziert in beiden DAGs (INSERT-Batches).
+- `weather_backfill_landing_to_raw.py`: ~250 einzelne DELETEs → ~80 Batch-DELETEs (pro Monat)
+- `energy_backfill_landing_to_raw.py`: ~300 einzelne DELETEs → ~90 Batch-DELETEs (pro Monat)
+
+**Betroffene Dateien**:
+- `airflow/dags/weather_backfill_landing_to_raw.py`
+- `airflow/dags/energy_backfill_landing_to_raw.py`
+
 ### PyIceberg Bulk-Write DAG + Backfill-Bug-Fixes (04.05.2026)
 
 - **Neuer DAG `energy_backfill_pyarrow.py`**: Schreibt Energy-Preisdaten via PyArrow/PyIceberg direkt
@@ -151,6 +172,9 @@ Korrekter Aufruf: `OM_TOKEN=<token> python3 scripts/om_glossary_ingest.py glossa
 - **`weather_backfill_landing_to_raw.py`**: Skip-Check von Monats- auf Tages-Ebene korrigiert
   (`CAST(date_key AS VARCHAR)` statt `date_trunc('month', ...)`); DELETE und INSERT
   auf Tag-Granularität umgestellt; batch_size=5000 je INSERT.
+  **Bugfix (05.05.2026)**: batch_size von 5000 auf 500 reduziert – sonst `SQLParseError:
+  Maximum number of tokens exceeded (10000)` in sqlparse wenn INSERT mit Parameter-Tupeln
+  für leere Tabellen läuft.
 - **`energy_backfill_landing_to_raw.py`**: Identische Fixes wie weather-Backfill (`bidding_zone`
   statt `location_key` als Partition-Filter).
 - **`airflow/Dockerfile`**: `pyiceberg` → `pyiceberg[pyarrow,s3fs]` (PyArrowFileIO + S3-Support für
