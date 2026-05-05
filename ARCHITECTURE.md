@@ -1039,3 +1039,75 @@ echo '<EXTERNAL_HOST> keycloak' | sudo tee -a /etc/hosts
 **Langfristige Lösung**: Traefik Reverse Proxy + DNS-Split-View (nicht implementiert, Aufwand > Nutzen für MVP)
 
 ---
+
+## 10. OpenLineage Transport-Konfiguration in Airflow 3.x (04.05.2026)
+
+### Problem: Scheduler und Task-Executor lesen unterschiedliche Env-Variablen
+
+In Airflow 3.x sind Scheduler und Task-Executor separate Prozesse. OpenLineage emittiert:
+- **START-Events**: vom Scheduler-Prozess beim Einreihen eines Task-Runs
+- **COMPLETE/FAIL-Events**: vom Task-Executor-Prozess nach Abschluss des Tasks
+
+Die openlineage-python Client-Variablen (`OPENLINEAGE_URL`, `OPENLINEAGE_ENDPOINT`) werden nur
+vom Task-Executor-Prozess vollständig ausgewertet. Der Scheduler liest `OPENLINEAGE_ENDPOINT`
+nicht zuverlässig – er nutzt die Standard-Konfiguration und sendet START-Events an den
+Default-Endpunkt `/api/v1/lineage`.
+
+### Lösung: AIRFLOW__OPENLINEAGE__TRANSPORT
+
+Die Airflow-native Konfiguration `AIRFLOW__OPENLINEAGE__TRANSPORT` wird von **allen** Airflow-Prozessen
+gelesen (Scheduler, Task-Executor, DAG-Processor, API-Server). Sie akzeptiert eine JSON-Transport-Konfiguration:
+
+```json
+{
+  "type": "http",
+  "url": "http://openmetadata-server:8585",
+  "endpoint": "/api/v1/openlineage/lineage",
+  "auth": {
+    "type": "api_key",
+    "apiKey": "<ingestion-bot-jwt-token>",
+    "apiKeyPrefix": "Bearer"
+  }
+}
+```
+
+In `docker-compose.yml` mit Variable-Substitution aus `.env`:
+
+```yaml
+# Einfache Anführungszeichen nötig – JSON-{} würden sonst als YAML-Block-Mapping geparst
+- 'AIRFLOW__OPENLINEAGE__TRANSPORT={"type": "http", "url": "http://openmetadata-server:8585", "endpoint": "/api/v1/openlineage/lineage", "auth": {"type": "api_key", "apiKey": "${OPENMETADATA_INGESTION_BOT_TOKEN}", "apiKeyPrefix": "Bearer"}}'
+```
+
+### Warum nicht OPENLINEAGE_URL allein?
+
+| Ansatz | START-Event | COMPLETE-Event | Authentifizierung |
+|--------|-------------|----------------|-------------------|
+| `OPENLINEAGE_URL` (falsch) | `/api/v1/lineage` → 405 | `/api/v1/lineage` → 405 | keine |
+| `OPENLINEAGE_URL` + `OPENLINEAGE_ENDPOINT` | `/api/v1/lineage` → 405 (Scheduler liest es nicht) | `/api/v1/openlineage/lineage` ✅ | `OPENLINEAGE_API_KEY` |
+| `AIRFLOW__OPENLINEAGE__TRANSPORT` ✅ | `/api/v1/openlineage/lineage` ✅ | `/api/v1/openlineage/lineage` ✅ | `auth.apiKey` im JSON |
+
+### OpenMetadata Endpunkt-Übersicht
+
+| Endpunkt | Methode | Zweck |
+|----------|---------|-------|
+| `/api/v1/lineage` | `PUT` | Manuelle Lineage-Updates (kein OpenLineage-Receiver) |
+| `/api/v1/openlineage/lineage` | `POST` | OpenLineage HTTP-Transport (Einzelevent) |
+| `/api/v1/openlineage/lineage/batch` | `POST` | OpenLineage HTTP-Transport (Batch) |
+
+### Token-Beschaffung (automatisiert)
+
+Der ingestion-bot JWT-Token ist permanent (`JWTTokenExpiry: Unlimited`) und in der OM-Datenbank
+persistiert. `start.sh` holt ihn nach dem Stack-Start automatisch:
+
+```
+POST /api/v1/users/login  (Passwort: Base64-kodiert, Response-Key: accessToken)
+  → GET /api/v1/bots/name/ingestion-bot  → botUser.id
+    → GET /api/v1/users/token/{userId}  → JWTToken
+```
+
+Token wird in `.env` als `OPENMETADATA_INGESTION_BOT_TOKEN` gespeichert. Airflow wird nur neu
+gestartet wenn der Token sich geändert hat (idempotent). Login-Retry mit 6 Versuchen à 10s,
+da der Health-Endpunkt `/api/v1/system/version` antwortet bevor das Auth-System vollständig
+bereit ist.
+
+---

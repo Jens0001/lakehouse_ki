@@ -703,10 +703,23 @@ healthcheck:
 
 27. **Erster Login**: `admin@open-metadata.org` / `admin` (getestet mit AUTHENTICATION_PROVIDER=basic + PostgreSQL, 20.03.2026). In der OM-UI unter Settings → Users → Admin → Edit Password sofort ändern. Das in der OM-Doku genannte Default-Passwort `Admin@1234!` gilt NUR wenn der Server mit dem internen MySQL-Default-Setup startet – bei PostgreSQL mit basic-Auth ist es `admin`.
 
-28. **OpenLineage-Endpunkt**: `POST http://openmetadata-server:8585/api/v1/lineage`
-    - Airflow-Env: `OPENLINEAGE_URL=http://openmetadata-server:8585`
-    - dbt-Adapter: `openlineage_url: http://openmetadata-server:8585` in profiles.yml
+28. **OpenLineage-Konfiguration in Airflow 3.x** (korrigiert 04.05.2026):
+    - **Richtiger Endpunkt**: `POST /api/v1/openlineage/lineage` (NICHT `/api/v1/lineage` – dieser akzeptiert nur PUT!)
+    - **`AIRFLOW__OPENLINEAGE__TRANSPORT`** als einheitliche JSON-Konfiguration verwenden – nicht `OPENLINEAGE_URL` allein:
+      ```
+      AIRFLOW__OPENLINEAGE__TRANSPORT={"type":"http","url":"http://openmetadata-server:8585",
+        "endpoint":"/api/v1/openlineage/lineage",
+        "auth":{"type":"api_key","apiKey":"${TOKEN}","apiKeyPrefix":"Bearer"}}
+      ```
+    - **Warum nicht OPENLINEAGE_URL + OPENLINEAGE_ENDPOINT?**: In Airflow 3.x emittiert der
+      Scheduler START-Events, der Task-Executor COMPLETE-Events – als separate Prozesse. `OPENLINEAGE_ENDPOINT`
+      wurde nur vom Task-Executor gelesen. `AIRFLOW__OPENLINEAGE__TRANSPORT` gilt für alle Prozesse uniform.
+    - **Authentifizierung**: OpenMetadata erfordert Bearer-Token. Ohne Token: 405 Method Not Allowed
+      (auch wenn der Endpunkt korrekt ist).
+    - **Token**: ingestion-bot JWT-Token, permanent (`JWTTokenExpiry: Unlimited`), wird automatisch
+      von `start.sh` aus der OM-API geholt und in `.env` als `OPENMETADATA_INGESTION_BOT_TOKEN` gespeichert.
     - Provider installieren: `apache-airflow-providers-openlineage` im Airflow-Dockerfile
+    - dbt-Adapter: `openlineage_url: http://openmetadata-server:8585` in profiles.yml (dbt nutzt eigenen Client)
 
 29. **Connector-Konfiguration in der OM-UI** (Settings → Services):
     - **Trino**: Type=Trino, Host=trino, Port=8080, Username=admin (kein Passwort bei OIDC-Auth)

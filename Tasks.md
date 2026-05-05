@@ -220,23 +220,19 @@
   - **Voraussetzung**: Trino + Iceberg muss `MERGE INTO` unterstützen (ab Trino 400+ und Iceberg v2 gegeben)
   - **Testplan**: Erst ein Modell umstellen (z.B. `s_weather_hourly`), mit `dbt run --select s_weather_hourly` testen, Zeilenanzahl vor/nach vergleichen, dann weitere Modelle schrittweise
 
-  - [x] **OpenLineage in Airflow aktivieren**
-    - **Problem**: OM-native Ingestion liefert Lineage aus dbt-Artefakten (manifest.json), aber keine **Runtime-Lineage** – d.h. es fehlt die Info, welcher konkrete DAG-Run welche Partition/Tabelle geschrieben hat, mit welchen Input-Datasets und wann.
-    - **Umsetzung** (minimaler Aufwand – eine Env-Variable + ein Package):
-      1. `apache-airflow-providers-openlineage` in `airflow/Dockerfile` installieren (pip install)
-      2. Env-Variable in `docker-compose.yml` unter `airflow.environment` ergänzt:
-         - `OPENLINEAGE_URL=http://openmetadata-server:8585`
-         - `OPENLINEAGE_NAMESPACE=lakehouse_airflow`
-      3. OM empfängt dann automatisch OpenLineage-Events bei jedem Task-Run
+  - [x] **OpenLineage in Airflow aktivieren** *(erledigt 04.05.2026)*
+    - **Umsetzung**: `AIRFLOW__OPENLINEAGE__TRANSPORT` in `docker-compose.yml` mit Endpunkt
+      `/api/v1/openlineage/lineage` + ingestion-bot Bearer-Token. Token wird automatisch von
+      `start.sh` beim Stack-Start aus der OM-API geholt und in `.env` gespeichert.
+    - **Details**: Memory.md Eintrag 28, Changelog.md 04.05.2026
     - [ ] **Explizite Lineage-Definition (inlets/outlets) in DAGs ergänzen**:
       - `PythonOperator` kann keine Tabellen automatisch erkennen.
       - In DAGs wie `energy_charts_to_raw.py` müssen `inlets` (S3-Pfad) und `outlets` (Iceberg-Tabelle) definiert werden, damit die Kanten in OM sichtbar werden.
-  - **Was danach sichtbar wird**:
-    - DAG `open_meteo_to_raw`: Input `open-meteo.com API` → Output `iceberg.raw.weather_hourly` (pro Run)
-    - DAG `energy_charts_to_raw`: Input `api.energy-charts.info` → Output `iceberg.raw.energy_price_hourly`
-    - DAG `dbt_run_lakehouse_ki`: Input `iceberg.raw.*` → Output `iceberg.marts.*` (gesamte dbt-Lineage als Runtime-Events)
-  - **Validierung**: Nach einem DAG-Run in OM UI → Lineage-Tab der Tabelle prüfen → Runtime-Kanten müssen sichtbar sein
-  - **Hinweis**: OM-native Airflow-Ingestion (täglich 02:00 UTC) liefert DAG-Struktur, OpenLineage ergänzt die Runtime-Ebene – beides komplementär, kein Entweder-Oder
+  - **Was sichtbar wird**:
+    - DAG `open_meteo_to_raw`: Runtime-Lineage pro Task-Run mit START/COMPLETE Events
+    - DAG `energy_charts_to_raw`: analog
+    - DAG `dbt_run_lakehouse_ki`: Modell-Lineage als Runtime-Events
+  - **Validierung**: Nach DAG-Run in OM UI → Lineage-Tab der Tabelle → Runtime-Kanten prüfen
 
 ---
 
@@ -263,7 +259,7 @@
   - [x] **Trino-Connector triggern**: Läuft automatisch täglich 03:00 UTC + manuell per API
   - [x] **dbt-Connector**: `manifest.json` + `catalog.json` + `run_results.json` importiert – Beschreibungen, Tags (`dbtTags.hub`, `dbtTags.satellite`), Test-Ergebnisse und Lineage sichtbar
   - [x] **Airflow-Connector**: DAGs, Tasks, Run-History im Katalog
-  - [ ] **Airflow OpenLineage**: `OPENLINEAGE_URL=http://openmetadata-server:8585` in Airflow-Env setzen *(optional – OM-native Ingestion liefert bereits Lineage)*
+  - [x] **Airflow OpenLineage**: konfiguriert via `AIRFLOW__OPENLINEAGE__TRANSPORT` *(erledigt 04.05.2026)*
   - [ ] **Dremio-Connector**: VDS-Metadaten crawlen *(nachgelagert, wenn VDS genutzt werden)*
   - [ ] **Keycloak-OIDC** für OM aktivieren *(optional)*: Anleitung in Memory.md
 

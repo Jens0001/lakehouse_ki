@@ -282,6 +282,87 @@ if [ "$KEYCLOAK_READY" = true ]; then
   fi
 fi
 
+# --- OpenMetadata: ingestion-bot Token für OpenLineage holen ----------------
+echo ""
+echo "Warte auf OpenMetadata Health..."
+OM_READY=false
+for i in $(seq 1 36); do
+  if curl -sf "http://localhost:8585/api/v1/system/version" >/dev/null 2>&1; then
+    echo "OpenMetadata ist bereit."
+    OM_READY=true
+    break
+  fi
+  echo "  Warte... ($((i*5))s)"
+  sleep 5
+done
+
+if [ "$OM_READY" = true ]; then
+  echo "Hole ingestion-bot JWT-Token von OpenMetadata..."
+
+  PASS_B64=$(echo -n "admin" | base64)
+  ADMIN_TOKEN=""
+  # Login-Retry: Auth-System braucht nach Health-OK noch einige Sekunden
+  for attempt in $(seq 1 6); do
+    ADMIN_TOKEN=$(curl -s -X POST "http://localhost:8585/api/v1/users/login" \
+      -H "Content-Type: application/json" \
+      -d "{\"email\":\"admin@open-metadata.org\",\"password\":\"${PASS_B64}\"}" | \
+      python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('accessToken',''))" 2>/dev/null || true)
+    if [ -n "$ADMIN_TOKEN" ]; then
+      echo "  ✓ Login erfolgreich (Versuch ${attempt})"
+      break
+    fi
+    echo "  Auth noch nicht bereit, warte 10s... (Versuch ${attempt}/6)"
+    sleep 10
+  done
+
+  if [ -z "$ADMIN_TOKEN" ]; then
+    echo "  ⚠️  Login fehlgeschlagen nach 6 Versuchen – ingestion-bot Token wird übersprungen."
+  else
+    # Bot-User-ID über Bots-Endpoint ermitteln, dann Token über token/{id} abrufen
+    BOT_USER_ID=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+      "http://localhost:8585/api/v1/bots/name/ingestion-bot" | \
+      python3 -c "import sys,json; d=json.load(sys.stdin); print((d.get('botUser') or {}).get('id',''))" 2>/dev/null || true)
+
+    if [ -z "$BOT_USER_ID" ]; then
+      echo "  ⚠️  ingestion-bot nicht gefunden."
+    else
+      BOT_TOKEN=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+        "http://localhost:8585/api/v1/users/token/${BOT_USER_ID}" | \
+        python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('JWTToken',''))" 2>/dev/null || true)
+
+      if [ -z "$BOT_TOKEN" ]; then
+        echo "  ⚠️  ingestion-bot Token konnte nicht gelesen werden."
+      else
+        OLD_TOKEN=$(grep '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || true)
+
+          # Token in .env schreiben (immer, damit OPENMETADATA_INGESTION_BOT_TOKEN aktuell ist)
+          if grep -q '^OPENMETADATA_INGESTION_BOT_TOKEN=' "$ENV_FILE"; then
+            sed_inplace "s|^OPENMETADATA_INGESTION_BOT_TOKEN=.*|OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}|" "$ENV_FILE"
+          else
+            echo "OPENMETADATA_INGESTION_BOT_TOKEN=${BOT_TOKEN}" >> "$ENV_FILE"
+          fi
+          # Komplettes Transport-JSON immer neu schreiben – auch wenn Token unverändert,
+          # da OPENLINEAGE_TRANSPORT_JSON bei einem früheren Lauf leer gewesen sein könnte.
+          TRANSPORT_JSON="{\"type\": \"http\", \"url\": \"http://openmetadata-server:8585\", \"endpoint\": \"/api/v1/openlineage/lineage\", \"auth\": {\"type\": \"api_key\", \"apiKey\": \"${BOT_TOKEN}\", \"apiKeyPrefix\": \"Bearer\"}}"
+          if grep -q '^OPENLINEAGE_TRANSPORT_JSON=' "$ENV_FILE"; then
+            sed_inplace "s|^OPENLINEAGE_TRANSPORT_JSON=.*|OPENLINEAGE_TRANSPORT_JSON=${TRANSPORT_JSON}|" "$ENV_FILE"
+          else
+            echo "OPENLINEAGE_TRANSPORT_JSON=${TRANSPORT_JSON}" >> "$ENV_FILE"
+          fi
+
+          if [ "$OLD_TOKEN" != "$BOT_TOKEN" ]; then
+            echo "  ✓ ingestion-bot Token geändert – starte Airflow neu..."
+            docker compose up -d airflow
+          else
+            echo "  ✓ ingestion-bot Token unverändert. Transport-JSON wurde trotzdem aktualisiert."
+          fi
+      fi
+    fi
+  fi
+else
+  echo "  ⚠️  OpenMetadata nicht erreichbar – ingestion-bot Token wird übersprungen."
+fi
+
 # --- Hinweise ----------------------------------------------------------------
 echo ""
 echo "=== Stack gestartet ==="
