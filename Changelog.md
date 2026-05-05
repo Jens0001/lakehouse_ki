@@ -4,6 +4,48 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### om_setup_connectors.py: Neues Skript für vollautomatisches Katalog-Setup (05.05.2026)
+
+**Problem**: Nach `docker compose down -v` war der OpenMetadata-Katalog leer. Trino-,
+Airflow- und dbt-Konnektoren mussten manuell in der OM-UI angelegt werden. Kein Skript
+übernahm das bisher.
+
+**Neues Skript** `scripts/om_setup_connectors.py`:
+- Legt Trino Database Service + Metadata-Pipeline (03:00 UTC) idempotent an
+- Legt Airflow Pipeline Service + Metadata-Pipeline (02:00 UTC) idempotent an
+  - Airflow-Connector liest DB direkt via SQLAlchemy (`postgres:5432`)
+  - Zugangsdaten aus Env-Vars `POSTGRES_USER` / `POSTGRES_PASSWORD`
+- Legt dbt-Pipeline am Trino-Service an (04:00 UTC)
+- Triggert alle drei Pipelines sofort nach Anlage
+- Triggert SearchIndexingApplication (ES-Index aufbauen)
+- Idempotent: kann jederzeit wiederholt ausgeführt werden
+
+**start.sh-Integration**:
+- Wird nach Bot-Token-Abruf automatisch ausgeführt
+- Wartet auf openmetadata-ingestion Health (max 90s) bevor Trigger
+- Übergibt `POSTGRES_USER`/`POSTGRES_PASSWORD` aus `.env`
+
+**Betroffene Dateien**: `scripts/om_setup_connectors.py` (neu), `start.sh`
+
+### om_setup_schedules.py: Hardcodierte UUIDs durch dynamische API-Lookups ersetzt (05.05.2026)
+
+**Problem**: `TRINO_PIPELINE_ID`, `AIRFLOW_PIPELINE_ID` und `TRINO_SERVICE_ID` waren als UUIDs
+hardcodiert. Nach jedem `docker compose down -v` vergibt OpenMetadata neue UUIDs → alle drei
+Werte wurden ungültig → HTTP 404 beim Ausführen des Skripts.
+
+**Fix**:
+- `get_service_id(token, service_name, service_type)` ermittelt Service-UUIDs per API-Lookup
+- `get_metadata_pipeline_id(token, service_name)` sucht die Metadata-Pipeline eines Services
+  dynamisch über `GET /api/v1/services/ingestionPipelines?service=<name>`
+- `TRINO_SERVICE_NAME = "lakehouse_trino"` und `AIRFLOW_SERVICE_NAME = "lakehouse_airflow"`
+  als leicht änderbare Konstanten statt unstabile UUIDs
+- Klare Fehlermeldungen wenn Services/Pipelines noch nicht in OM angelegt sind
+
+**Betroffene Datei**: `scripts/om_setup_schedules.py`
+
+**Hinweis `om_glossary_ingest.py`**: Falscher Aufruf `python3 om_glossary_ingest.py om_dbt_ingestion.yaml`.
+Korrekter Aufruf: `OM_TOKEN=<token> python3 scripts/om_glossary_ingest.py glossary_structure.json`
+
 ### OpenLineage: Airflow → OpenMetadata vollständig automatisiert (04.05.2026)
 
 **Problem 1 – falscher Endpunkt (405 Method Not Allowed)**:

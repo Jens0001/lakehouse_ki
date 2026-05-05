@@ -123,9 +123,11 @@
 - [x] **dbt-Connector**: 83 Records, 10 Modelle, 0 Fehler (21.03.2026)
   - `catalog.json` via `dbt docs generate` generiert
   - Beschreibungen, Tags, Lineage und Test-Ergebnisse in OM sichtbar
-- [x] **OM-Ingestion Vollautomatik** (23.03.2026): Alle drei Connectors laufen täglich per Schedule
+- [x] **OM-Ingestion Vollautomatik** (23.03.2026 / erweitert 05.05.2026):
   - Trino 03:00, Airflow 02:00, dbt 04:00 UTC
-  - `scripts/om_setup_schedules.py` setzt Schedules nach Stack-Neuanlage
+  - `scripts/om_setup_connectors.py` legt alle drei Konnektoren + Pipelines automatisch an
+    und triggert sie sofort – wird von `start.sh` nach Stack-Start aufgerufen
+  - `scripts/om_setup_schedules.py` für nachträgliche Schedule-Änderungen (dynamische Lookups, keine hardcodierten IDs)
   - DAG `dbt_run_lakehouse_ki` generiert täglich `catalog.json` via `dbt_docs_generate`-Task
 - [ ] **dbt-Dokumentation generieren und hosten**
   - `dbt docs generate` erzeugt `catalog.json` + `manifest.json`

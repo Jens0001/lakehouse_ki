@@ -721,6 +721,15 @@ healthcheck:
     - Provider installieren: `apache-airflow-providers-openlineage` im Airflow-Dockerfile
     - dbt-Adapter: `openlineage_url: http://openmetadata-server:8585` in profiles.yml (dbt nutzt eigenen Client)
 
+36. **OpenMetadata Connector-Setup vollautomatisiert** (05.05.2026):
+    - `scripts/om_setup_connectors.py` legt Trino-, Airflow- und dbt-Konnektoren idempotent an
+    - Wird automatisch von `start.sh` nach dem Bot-Token-Abruf ausgeführt
+    - Airflow-Connector: Direktverbindung zu `postgres:5432` (SQLAlchemy), NICHT REST-API
+      - Env-Vars: `POSTGRES_USER` / `POSTGRES_PASSWORD` werden aus `.env` übergeben
+    - Reihenfolge in start.sh: OM-Health → Bot-Token → Ingestion-Health → Connector-Setup
+    - Manuelle Ausführung: `POSTGRES_USER=airflow POSTGRES_PASSWORD=airflow123 python3 scripts/om_setup_connectors.py`
+    - `om_setup_schedules.py` bleibt für nachträgliche Schedule-Änderungen erhalten
+
 29. **Connector-Konfiguration in der OM-UI** (Settings → Services):
     - **Trino**: Type=Trino, Host=trino, Port=8080, Username=admin (kein Passwort bei OIDC-Auth)
     - **dbt**: dbt Cloud oder lokale Dateien – `manifest.json` + `catalog.json` aus `dbt/target/`
@@ -816,6 +825,11 @@ Um OM an Keycloak anzubinden, folgende Schritte:
     - **Lösung**: `scripts/om_setup_schedules.py` nach Stack-Neuanlage einmalig ausführen
     - Skript ist idempotent (wiederholbar), setzt alle drei Schedules: Airflow 02:00, Trino 03:00, dbt 04:00 UTC
     - Login: Passwort muss Base64-encodiert übergeben werden (`base64.b64encode(b'admin').decode()`)
+    - **ACHTUNG**: Hardcodierte UUIDs wurden am 05.05.2026 durch dynamische Lookups ersetzt. Skript
+      benötigt korrekte Service-Namen als Konstanten: `TRINO_SERVICE_NAME`, `AIRFLOW_SERVICE_NAME`.
+    - Voraussetzung: Trino- und Airflow-Connector müssen in OM-UI bereits angelegt sein (Settings → Services).
+    - `om_glossary_ingest.py` – korrekter Aufruf: `OM_TOKEN=<token> python3 scripts/om_glossary_ingest.py glossary_structure.json`
+      (nicht `om_dbt_ingestion.yaml` – das ist eine Ingestion-Konfiguration, keine Glossar-Datei)
 
 31. **dbt-Ingestion benötigt immer aktuelles `catalog.json`**:
     - `catalog.json` wird NICHT von dbt auto-generiert bei `dbt run` – nur bei `dbt docs generate`

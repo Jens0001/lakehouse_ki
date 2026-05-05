@@ -1,20 +1,57 @@
 #!/usr/bin/env bash
 # ============================================================================
-# Lakehouse KI – Start-Script mit automatischer EXTERNAL_HOST-Erkennung
+# Lakehouse KI – Start-Script
 # ============================================================================
-# Erkennt die Netzwerk-IP und setzt EXTERNAL_HOST in .env, damit alle
-# Browser-Redirects (MinIO, Keycloak OIDC) auf die richtige Adresse zeigen.
 #
 # Verwendung:
-#   ./start.sh                    # Automatische IP-Erkennung (schneller Start)
-#   ./start.sh 192.168.1.50       # Manuelle IP/Hostname
-#   ./start.sh localhost          # Explizit localhost (lokale Entwicklung)
-#   ./start.sh --build            # Mit Docker Image Rebuild (nach Code-Änderungen)
+#   ./start.sh                      # Automatische IP-Erkennung
+#   ./start.sh 192.168.1.50         # Manuelle IP/Hostname (Remote-Zugriff)
+#   ./start.sh localhost            # Explizit localhost
+#   ./start.sh --build              # Mit Docker Image Rebuild
 #   ./start.sh 192.168.1.50 --build # IP + Rebuild
 #
-# Hinweise:
-#   - --build ist nur nötig nach Airflow Dockerfile/Dependency-Änderungen
-#   - DAG/Plugin-Änderungen brauchen KEIN --build (schneller Restart)
+# --build ist nur nötig nach Änderungen am Airflow-Dockerfile oder den
+# Python-Dependencies. DAG/Plugin-Änderungen brauchen kein --build.
+#
+# ── Ablauf (in dieser Reihenfolge) ──────────────────────────────────────────
+#
+#  SCHRITT 1  Parameter & IP-Erkennung
+#             EXTERNAL_HOST aus Argument oder automatisch (hostname -I)
+#
+#  SCHRITT 2  .env aktualisieren
+#             EXTERNAL_HOST, OM_URL, KEYCLOAK_HOSTNAME, KEYCLOAK_URL
+#
+#  SCHRITT 3  Pre-Start-Checks (vor docker compose up)
+#             - Verzeichnis-Berechtigungen (airflow/dags, airflow/logs, dbt)
+#             - Airflow Fernet Key (generieren falls fehlt oder ungültig)
+#             - Keycloak Client Secrets (generieren falls fehlt oder Platzhalter)
+#
+#  SCHRITT 4  Stack starten
+#             docker compose up -d [--build]
+#
+#  SCHRITT 5  Keycloak warten & konfigurieren  (max 120s)
+#             - Client Secrets in Keycloak injizieren
+#             - Redirect URIs aktualisieren (nur bei externer IP)
+#
+#  SCHRITT 6  Business Glossary importieren
+#             scripts/om_glossary_ingest.py  (nur wenn OM_TOKEN gesetzt)
+#
+#  SCHRITT 7  OpenMetadata warten  (max 180s)
+#             Health-Check auf /api/v1/system/version
+#
+#  SCHRITT 8  ingestion-bot Token holen & OpenLineage konfigurieren
+#             Token aus OM-API → .env (OPENMETADATA_INGESTION_BOT_TOKEN)
+#             OpenLineage Transport-JSON → .env (OPENLINEAGE_TRANSPORT_JSON)
+#             Airflow-Neustart wenn Token sich geändert hat
+#
+#  SCHRITT 9  OpenMetadata Konnektoren anlegen & Ingestion triggern
+#             Wartet auf openmetadata-ingestion Health (max 90s)
+#             scripts/om_setup_connectors.py
+#             Legt Trino-, Airflow- und dbt-Konnektoren idempotent an
+#             und triggert alle Pipelines sofort.
+#
+#  SCHRITT 10 Fertig – Service-URLs ausgeben
+#
 # ============================================================================
 set -euo pipefail
 
@@ -31,7 +68,7 @@ sed_inplace() {
   fi
 }
 
-# --- Parameter-Verarbeitung --------------------------------------------------
+# === SCHRITT 1: Parameter & IP-Erkennung =====================================
 detect_ip() {
   local ip=""
   case "$(uname -s)" in
@@ -70,7 +107,7 @@ else
   echo "Build Mode: NEIN (schneller Start)"
 fi
 
-# --- .env aktualisieren -----------------------------------------------------
+# === SCHRITT 2: .env aktualisieren ===========================================
 if [ ! -f "$ENV_FILE" ]; then
   echo "FEHLER: $ENV_FILE nicht gefunden. Bitte erst 'cp .env.example .env' ausführen."
   exit 1
@@ -120,7 +157,7 @@ else
 fi
 echo "KEYCLOAK_URL in .env aktualisiert: ${KEYCLOAK_URL_VAL}"
 
-# --- Pre-Start: Berechtigungen und Konfigurationen anpassen -------------------
+# === SCHRITT 3: Pre-Start-Checks (Berechtigungen, Secrets) ===================
 echo ""
 echo "Überprüfe und repariere Berechtigungen..."
 
@@ -225,7 +262,7 @@ for VAR in KEYCLOAK_CLIENT_SECRET_TRINO KEYCLOAK_CLIENT_SECRET_MINIO KEYCLOAK_CL
   fi
 done
 
-# --- Docker Compose starten -------------------------------------------------
+# === SCHRITT 4: Stack starten ================================================
 echo ""
 echo "Starte Stack..."
 
@@ -237,7 +274,7 @@ else
   docker compose up -d
 fi
 
-# --- Keycloak Konfigurationen nach Start aktualisieren -------------------------
+# === SCHRITT 5: Keycloak warten & konfigurieren ==============================
 echo ""
 echo "Warte auf Keycloak Health..."
 # Max 120s warten
@@ -263,7 +300,7 @@ if [ "$KEYCLOAK_READY" = true ]; then
     bash init-scripts/update-keycloak-redirects.sh "${EXTERNAL_HOST}"
   fi
 
-  # --- Business Glossary Ingestion ---------------------------------------------
+  # === SCHRITT 6: Business Glossary importieren ================================
   echo ""
   echo "Importiere Business Glossary..."
   # Lade OM-Variablen aus .env, damit das Python-Skript sie sieht
@@ -282,7 +319,7 @@ if [ "$KEYCLOAK_READY" = true ]; then
   fi
 fi
 
-# --- OpenMetadata: ingestion-bot Token für OpenLineage holen ----------------
+# === SCHRITT 7: OpenMetadata warten =========================================
 echo ""
 echo "Warte auf OpenMetadata Health..."
 OM_READY=false
@@ -297,6 +334,7 @@ for i in $(seq 1 36); do
 done
 
 if [ "$OM_READY" = true ]; then
+  # === SCHRITT 8: ingestion-bot Token holen & OpenLineage konfigurieren ======
   echo "Hole ingestion-bot JWT-Token von OpenMetadata..."
 
   PASS_B64=$(echo -n "admin" | base64)
@@ -359,11 +397,37 @@ if [ "$OM_READY" = true ]; then
       fi
     fi
   fi
+
+  # === SCHRITT 9: Konnektoren anlegen & Ingestion triggern ===================
+  echo ""
+  echo "Konfiguriere OpenMetadata Konnektoren..."
+  # Warte kurz auf den openmetadata-ingestion Container (startet nach dem Server)
+  INGESTION_READY=false
+  for i in $(seq 1 18); do
+    if curl -sf "http://localhost:8090/api/v2/monitor/health" 2>/dev/null | grep -q '"status":"healthy"'; then
+      INGESTION_READY=true
+      break
+    fi
+    echo "  Warte auf openmetadata-ingestion... ($((i*5))s)"
+    sleep 5
+  done
+
+  if [ "$INGESTION_READY" = true ]; then
+    # POSTGRES_USER/PASSWORD für den Airflow-Connector (DB-Direkt-Verbindung)
+    PG_USER=$(grep '^POSTGRES_USER=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || echo "airflow")
+    PG_PASS=$(grep '^POSTGRES_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- | tr -d ' ' || echo "airflow123")
+    POSTGRES_USER="$PG_USER" POSTGRES_PASSWORD="$PG_PASS" \
+      python3 scripts/om_setup_connectors.py || \
+      echo "  ⚠️  Connector-Setup fehlgeschlagen – bitte manuell ausführen: python3 scripts/om_setup_connectors.py"
+  else
+    echo "  ⚠️  openmetadata-ingestion nicht erreichbar – Connector-Setup übersprungen."
+    echo "      Manuell nachholen: python3 scripts/om_setup_connectors.py"
+  fi
 else
-  echo "  ⚠️  OpenMetadata nicht erreichbar – ingestion-bot Token wird übersprungen."
+  echo "  ⚠️  OpenMetadata nicht erreichbar – ingestion-bot Token und Connector-Setup übersprungen."
 fi
 
-# --- Hinweise ----------------------------------------------------------------
+# === SCHRITT 10: Fertig – Service-URLs ausgeben ==============================
 echo ""
 echo "=== Stack gestartet ==="
 echo ""

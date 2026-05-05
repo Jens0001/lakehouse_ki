@@ -126,20 +126,55 @@ Das Projekt kombiniert führende Open-Source-Tools zu einem integrierten Data An
    - Airflow initialisiert DB + Admin-User
    - OpenMetadata startet und ist unter http://localhost:8585 erreichbar
 
-4. **⚠️ OpenMetadata Ingestion-Schedules einrichten** *(einmalig nach erstem Start oder nach `docker compose down -v`)*:
-   ```bash
-   python3 scripts/om_setup_schedules.py
-   ```
-   Dieser Schritt ist nötig, weil OM-Konfiguration im Volume gespeichert wird und bei einer Neuanlage verloren geht. Das Skript setzt die Cron-Schedules für alle drei Ingestion-Pipelines (Airflow 02:00, Trino 03:00, dbt 04:00 UTC).
-
-   > **Hinweis**: Nach einem normalen `docker compose down && docker compose up` (ohne `-v`) bleiben die Schedules erhalten – das Skript wird dann nicht gebraucht.
-
-5. **Überprüfen, ob alle Services laufen**:
+4. **Überprüfen, ob alle Services laufen**:
    ```bash
    docker compose ps
    # Oder ausführlicher mit OIDC-Checks:
    bash scripts/health_check.sh
    ```
+
+### start.sh – Ablauf im Detail
+
+```
+./start.sh [IP] [--build]
+│
+├── 1  Parameter & IP-Erkennung
+│        EXTERNAL_HOST aus Argument oder automatisch (hostname -I)
+│
+├── 2  .env aktualisieren
+│        EXTERNAL_HOST · OM_URL · KEYCLOAK_HOSTNAME · KEYCLOAK_URL
+│
+├── 3  Pre-Start-Checks
+│        ├── Verzeichnis-Berechtigungen  (airflow/dags, logs, dbt)
+│        ├── Airflow Fernet Key          (generieren falls fehlt/ungültig)
+│        └── Keycloak Client Secrets     (generieren falls Platzhalter)
+│
+├── 4  Stack starten
+│        docker compose up -d [--build]
+│
+├── 5  Keycloak warten & konfigurieren           (max. 120 s)
+│        ├── Client Secrets in Keycloak injizieren
+│        └── Redirect URIs aktualisieren          (nur bei externer IP)
+│
+├── 6  Business Glossary importieren
+│        scripts/om_glossary_ingest.py            (nur wenn OM_TOKEN gesetzt)
+│
+├── 7  OpenMetadata warten                        (max. 180 s)
+│        Health-Check: GET /api/v1/system/version
+│
+├── 8  ingestion-bot Token holen
+│        ├── Token aus OM-API → .env  (OPENMETADATA_INGESTION_BOT_TOKEN)
+│        ├── OpenLineage Transport-JSON → .env  (OPENLINEAGE_TRANSPORT_JSON)
+│        └── Airflow-Neustart wenn Token neu
+│
+├── 9  Konnektoren anlegen & Ingestion triggern  (max. 90 s)
+│        scripts/om_setup_connectors.py
+│        ├── Trino   Database Service  (tägl. 03:00 UTC)
+│        ├── Airflow Pipeline Service  (tägl. 02:00 UTC)
+│        └── dbt     Pipeline          (tägl. 04:00 UTC)  → alle sofort getriggert
+│
+└── 10 Fertig – Service-URLs ausgeben
+```
 
 ## 📊 Service-URLs & Zugangsdaten
 
@@ -423,33 +458,63 @@ docker run --rm \
   bash -c "/home/airflow/.local/bin/metadata ingest -c /tmp/dbt.yaml"
 ```
 
-### 📚 Business Glossary Ingestion
-Zusätzlich zur technischen Ingestion gibt es ein Business-Glossar, das die semantische Bedeutung der Daten definiert.
+### 🛠️ OpenMetadata Helper-Scripts
 
-**Automatisierung:**
-Die Ingestion ist in `start.sh` integriert. Beim Start des Stacks wird geprüft, ob ein gültiger `OM_TOKEN` in der `.env` vorhanden ist. Wenn ja, wird das Glossar automatisch aus der `glossary_structure.json` importiert. Die `OM_URL` wird dabei automatisch an den `EXTERNAL_HOST` angepasst.
+Alle drei Skripte werden von `start.sh` automatisch aufgerufen. Sie können auch manuell ausgeführt werden.
 
-**Manuelle Ausführung (für Updates):**
-Falls Sie das Glossar aktualisiert haben und es ohne Neustart des Stacks importieren möchten:
+---
+
+#### `scripts/om_setup_connectors.py` — Konnektoren anlegen *(Hauptskript)*
+
+Legt die drei Konnektoren und ihre Ingestion-Pipelines idempotent an und triggert sie sofort.
+Wird von `start.sh` automatisch nach dem Stack-Start ausgeführt. Nach einem `docker compose down -v`
+(Volume-Löschung) stellt dieses Skript den gesamten Katalog-Setup wieder her.
+
+| Konnektor | Service-Typ | Schedule |
+|---|---|---|
+| Trino | Database Service | täglich 03:00 UTC |
+| Airflow | Pipeline Service | täglich 02:00 UTC |
+| dbt | Pipeline am Trino-Service | täglich 04:00 UTC |
+
 ```bash
-# OM_URL wird meist schon in der .env stehen, ansonsten:
-export OM_URL="http://localhost:8585/api" 
-export OM_TOKEN="dein_token_hier"
+# Manuelle Ausführung (Stack muss laufen):
+POSTGRES_USER=airflow POSTGRES_PASSWORD=airflow123 \
+  python3 scripts/om_setup_connectors.py
+```
 
-# Glossar importieren
+> **Hinweis**: Das Skript ist idempotent – mehrfaches Ausführen hat keinen negativen Effekt.
+> Bereits vorhandene Services und Pipelines werden nicht überschrieben.
+
+---
+
+#### `scripts/om_glossary_ingest.py` — Business Glossar importieren
+
+Liest `glossary_structure.json` und erstellt die hierarchischen Business-Begriffe in OpenMetadata.
+Wird von `start.sh` automatisch aufgerufen wenn `OM_TOKEN` in der `.env` gesetzt ist.
+
+```bash
+# Manuelle Ausführung (z.B. nach Änderungen an glossary_structure.json):
+export OM_URL="http://localhost:8585/api"
+export OM_TOKEN="<token aus OM-UI: Settings → Users → [User] → Token>"
 python3 scripts/om_glossary_ingest.py glossary_structure.json
 ```
-Das Skript liest die `glossary_structure.json` und erstellt die hierarchischen Business-Begriffe direkt in OpenMetadata.
 
-### Schedules ändern
+> **Hinweis**: `OM_TOKEN` muss einmalig manuell in der OM-UI generiert und in die `.env` eingetragen
+> werden. `OM_URL` wird von `start.sh` automatisch gesetzt.
 
-Schedules können per API geändert werden (Token aus `docker logs lakehouse_openmetadata_server` oder als Admin-Login-Token):
+---
+
+#### `scripts/om_setup_schedules.py` — Schedules nachträglich ändern
+
+Ändert die Cron-Schedules bestehender Ingestion-Pipelines ohne Stack-Neustart.
+Wird **nicht** automatisch von `start.sh` aufgerufen – nur bei Bedarf manuell ausführen.
 
 ```bash
+# Manuelle Ausführung (z.B. nach Schedule-Anpassung):
 python3 scripts/om_setup_schedules.py
 ```
 
-Oder in der OM-UI: **Settings → Services → [Service] → Ingestion → Edit → Schedule**
+Alternativ in der OM-UI: **Settings → Services → [Service] → Ingestions → Edit → Schedule**
 
 ## �🐛 Troubleshooting
 
