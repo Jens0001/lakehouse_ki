@@ -41,6 +41,9 @@ services:
       - NESSIE_VERSION_STORE_TYPE=ROCKSDB
       - QUARKUS_LOG_LEVEL=WARN
       - QUARKUS_CONFIG_LOCATIONS=/opt/nessie/conf/application.properties
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin123
+      - AWS_REGION=us-east-1
     volumes:
       - nessie_data:/opt/nessie/data
       - ./catalog/conf:/opt/nessie/conf
