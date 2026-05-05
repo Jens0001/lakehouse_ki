@@ -82,6 +82,21 @@ def _get_minio_client():
     )
 
 
+def _trino_insert(hook, sql: str) -> None:
+    """Führt ein INSERT direkt über den Trino-Cursor aus.
+
+    hook.run() leitet SQL durch sqlparse, das bei großen Statements (>10 000 Token)
+    fehlschlägt. Der Cursor selbst hat kein solches Limit.
+    """
+    conn = hook.get_conn()
+    cur = conn.cursor()
+    try:
+        cur.execute(sql)
+        cur.fetchall()
+    finally:
+        cur.close()
+
+
 def _sql_value(val, cast_type="varchar"):
     """
     Wandelt einen Python-Wert in ein Trino-SQL-Literal um.
@@ -211,16 +226,12 @@ def load_tracks_to_raw(**_):
         rows.append(values)
         row_count += 1
 
-        # Batch-Insert in Blöcken von 50 Rows (Trino hat Token-Limit von 10000)
-        if len(rows) >= 100:
-            insert_sql = f"INSERT INTO {RAW_TRACKS_TABLE} VALUES {', '.join(rows)}"
-            hook.run(insert_sql)
+        if len(rows) >= 500:
+            _trino_insert(hook, f"INSERT INTO {RAW_TRACKS_TABLE} VALUES {', '.join(rows)}")
             rows = []
 
-    # Rest-Batch schreiben
     if rows:
-        insert_sql = f"INSERT INTO {RAW_TRACKS_TABLE} VALUES {', '.join(rows)}"
-        hook.run(insert_sql)
+        _trino_insert(hook, f"INSERT INTO {RAW_TRACKS_TABLE} VALUES {', '.join(rows)}")
 
     print(f"✅ {row_count} Tracks in {RAW_TRACKS_TABLE} geschrieben (Quelle: {TRACKS_KEY})")
 
@@ -313,11 +324,11 @@ def load_charts_to_raw(**_):
                 row_count += 1
 
                 if len(rows) >= 500:
-                    hook.run(f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}")
+                    _trino_insert(hook, f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}")
                     rows = []
 
         if rows:
-            hook.run(f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}")
+            _trino_insert(hook, f"INSERT INTO {RAW_CHARTS_TABLE} VALUES {', '.join(rows)}")
 
     finally:
         os.unlink(tmp_path)
