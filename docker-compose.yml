@@ -33,14 +33,13 @@ services:
 
   # Nessie Catalog
   nessie:
-    image: projectnessie/nessie:latest
+    image: ghcr.io/projectnessie/nessie:0.107.5
     container_name: lakehouse_nessie
     ports:
       - "19120:19120"
     environment:
       - NESSIE_VERSION_STORE_TYPE=ROCKSDB
       - QUARKUS_LOG_LEVEL=WARN
-      - QUARKUS_OIDC_ENABLED=false
       # Nessie Catalog – aktiviert die Iceberg REST API unter /iceberg/v1/
       - NESSIE_CATALOG_DEFAULT__WAREHOUSE=warehouse
       - NESSIE_CATALOG_WAREHOUSES_WAREHOUSE_LOCATION=s3://lakehouse/
@@ -50,6 +49,7 @@ services:
       - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_ACCESS__KEY_NAME=minioadmin
       - NESSIE_CATALOG_SERVICE_S3_DEFAULT__OPTIONS_ACCESS__KEY_SECRET=minioadmin123
     volumes:
+      - nessie_data:/opt/nessie/data
       - ./catalog/conf:/opt/nessie/conf
     networks:
       - lakehouse_network
@@ -510,6 +510,8 @@ services:
       - lakehouse_network
 
 volumes:
+  nessie_data:
+
   postgres_data:
 
   keycloak_data:
