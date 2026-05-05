@@ -62,6 +62,7 @@ def _get_iceberg_catalog():
         **{
             "type": "rest",
             "uri": Variable.get("NESSIE_URI", default_var="http://nessie:19120/iceberg"),
+            "warehouse": "s3://lakehouse/",
             "s3.endpoint": Variable.get("MINIO_ENDPOINT", default_var="http://minio:9000"),
             "s3.access-key-id": Variable.get("MINIO_ACCESS_KEY", default_var="minioadmin"),
             "s3.secret-access-key": Variable.get("MINIO_SECRET_KEY", default_var="minioadmin123"),
