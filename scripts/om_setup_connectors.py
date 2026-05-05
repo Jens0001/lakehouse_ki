@@ -72,7 +72,7 @@ def api_get(token: str, path: str) -> dict | None:
 
 
 def api_post(token: str, path: str, data: dict) -> dict:
-    """POST-Request."""
+    """POST-Request. Returns {} when the response body is empty (e.g. trigger/deploy)."""
     req = urllib.request.Request(
         f"{OM_URL}/{path}",
         data=json.dumps(data).encode(),
@@ -82,7 +82,8 @@ def api_post(token: str, path: str, data: dict) -> dict:
         },
         method="POST",
     )
-    return json.loads(urllib.request.urlopen(req).read())
+    body = urllib.request.urlopen(req).read()
+    return json.loads(body) if body.strip() else {}
 
 
 # ── Service- und Pipeline-Helfer ──────────────────────────────────────────────
@@ -121,6 +122,18 @@ def ensure_pipeline(
     payload_with_svc = {**payload, "service": {"id": service_id, "type": service_ref_type}}
     created = api_post(token, "services/ingestionPipelines", payload_with_svc)
     return created["id"], "created"
+
+
+def deploy_pipeline(token: str, pipeline_id: str, label: str) -> bool:
+    """Deployt eine Pipeline zum Airflow-Backend (nötig nach Neuanlage).
+    Gibt True zurück wenn erfolgreich."""
+    try:
+        api_post(token, f"services/ingestionPipelines/deploy/{pipeline_id}", {})
+        print(f"    ✓ {label} deployed")
+        return True
+    except urllib.error.HTTPError as e:
+        print(f"    ⚠ {label}: Deploy fehlgeschlagen (HTTP {e.code})")
+        return False
 
 
 def trigger_pipeline(token: str, pipeline_id: str, label: str) -> None:
@@ -289,11 +302,17 @@ if __name__ == "__main__":
     )
     print(f"  dbt-Pipeline: {status}  [id={dbt_pipe_id[:8]}...]")
 
-    # ── 4. Alle Pipelines sofort triggern ─────────────────────────────────────
-    print("\n── Ingestion-Pipelines triggern ──")
-    trigger_pipeline(token, trino_pipe_id,   "Trino Metadata")
-    trigger_pipeline(token, airflow_pipe_id, "Airflow Metadata")
-    trigger_pipeline(token, dbt_pipe_id,     "dbt Metadata")
+    # ── 4. Alle Pipelines deployen und sofort triggern ────────────────────────
+    # Deploy synct die Pipeline zum Airflow-Backend – ohne Deploy schlägt Trigger
+    # mit HTTP 400 fehl (Pipeline existiert in OM, aber noch nicht in Airflow).
+    print("\n── Ingestion-Pipelines deployen & triggern ──")
+    for pipe_id, label in [
+        (trino_pipe_id,   "Trino Metadata"),
+        (airflow_pipe_id, "Airflow Metadata"),
+        (dbt_pipe_id,     "dbt Metadata"),
+    ]:
+        deploy_pipeline(token, pipe_id, label)
+        trigger_pipeline(token, pipe_id, label)
 
     # ── 5. Elasticsearch-Suchindex aufbauen ───────────────────────────────────
     print("\n── Elasticsearch-Suchindex ──")
