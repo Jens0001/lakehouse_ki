@@ -113,11 +113,8 @@ services:
       - ./dbt:/opt/dbt
       # JDBC Treiber: Oracle (ojdbc11) und IBM DB2 (db2jcc) – read-only gemountet
       - ./jdbc_drivers:/opt/jdbc_drivers:ro
-      # Init-Scripts: User-Erstellung + Connections (Airflow 3.x hat kein 'airflow users create' CLI mehr)
-      - ./scripts/airflow_init_users.py:/opt/airflow/scripts/airflow_init_users.py:ro
-      - ./scripts/airflow_init_connections.py:/opt/airflow/scripts/airflow_init_connections.py:ro
-      # Cognos API Sync: Bridge-Skript + Export-Verzeichnis
-      - ./scripts/cognos_api_sync.py:/opt/airflow/scripts/cognos_api_sync.py:ro
+      # Scripts-Verzeichnis komplett gemountet – Verzeichnis-Mount überlebt git pull ohne Container-Neustart
+      - ./scripts:/opt/airflow/scripts:ro
       - ./cognos/api_exports:/opt/airflow/cognos/api_exports
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
