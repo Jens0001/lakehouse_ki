@@ -1175,6 +1175,27 @@ class CognosOMIngester:
         except urllib.error.HTTPError as exc:
             self._errors += 1
             log.error("  ✗ Dashboard-Fehler: %s", exc)
+            return
+
+        # Lineage: DataModel → Dashboard (explizite Kante für den Lineage-Graphen)
+        dash_id = result.get("id", "")
+        for dm_fqn in data_model_fqns:
+            dm_entity = self.client.get(f"v1/dashboard/datamodels/name/{dm_fqn}")
+            if not dm_entity:
+                log.warning("    ⚠ DataModel nicht gefunden für Lineage: %s", dm_fqn)
+                continue
+            lineage_payload = {
+                "edge": {
+                    "fromEntity": {"id": dm_entity["id"], "type": "dashboardDataModel"},
+                    "toEntity":   {"id": dash_id,          "type": "dashboard"},
+                }
+            }
+            try:
+                self.client.put("v1/lineage", lineage_payload)
+                self._lineage += 1
+                log.info("    → Lineage: %s → Dashboard", dm_fqn)
+            except urllib.error.HTTPError as exc:
+                log.warning("    ⚠ Lineage-Fehler DataModel→Dashboard %s: %s", dm_fqn, exc)
 
 
 # ---------------------------------------------------------------------------
