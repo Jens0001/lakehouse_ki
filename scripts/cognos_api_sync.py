@@ -863,7 +863,7 @@ class CognosOMIngester:
             "displayName": f"{qs_label} ({module_label})",
             "description": description,
             "service": OM_SERVICE_NAME,
-            "dataModelType": "CustomDashboard",
+            "dataModelType": "LookMlView",
             "columns": columns,
         }
 
@@ -1149,8 +1149,8 @@ class CognosOMIngester:
             "displayName": dash_name,
             "description": description,
             "service": OM_SERVICE_NAME,
-            "charts": [{"fullyQualifiedName": fqn} for fqn in chart_fqns],
-            "dataModels": [{"fullyQualifiedName": fqn} for fqn in data_model_fqns],
+            "charts": chart_fqns,
+            "dataModels": data_model_fqns,
         }
 
         try:
