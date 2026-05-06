@@ -690,6 +690,7 @@ class OMClient:
         except urllib.error.HTTPError as exc:
             body_text = exc.read().decode(errors="replace") if exc.fp else ""
             if exc.code == 404:
+                log.warning("OM HTTP %s %s → 404 (nicht gefunden): %s", method, url, body_text[:200])
                 return None
             log.error("OM HTTP %s %s → %d: %s", method, url, exc.code, body_text[:500])
             raise
@@ -818,6 +819,11 @@ class CognosOMIngester:
                 "dataTypeDisplay": display_type,  # Originaler Cognos-Typ (z.B. "VARCHAR(2147483647)")
                 "description": " | ".join(desc_parts),
             }
+
+            # VARCHAR/CHAR/BINARY/VARBINARY erfordern dataLength – aus Cognos-Typ extrahieren
+            if om_type in {"VARCHAR", "CHAR", "BINARY", "VARBINARY"}:
+                m = re.search(r'\((\d+)\)', display_type)
+                col["dataLength"] = int(m.group(1)) if m else 255
 
             if tag_name:
                 # Classification-Tag setzt das semantische Label in OM
