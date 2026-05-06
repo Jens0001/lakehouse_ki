@@ -1080,7 +1080,7 @@ class CognosOMIngester:
 
         Widget-Spalten haben das Format "querySubject.column" – der QuerySubject-Name
         vor dem Punkt wird verwendet, um den passenden Data Model FQN zu konstruieren:
-          fact_weather_daily.temperature_avg → cognos_analytics.Lakehouse_KI__fact_weather_daily
+          fact_weather_daily.temperature_avg → cognos_analytics.model.Lakehouse_KI__fact_weather_daily
         """
         dash_name = dashboard_data.get("name", "Unbekanntes Dashboard")
         sanitized = re.sub(r"[^a-zA-Z0-9_]+", "_", dash_name).strip("_")
@@ -1138,7 +1138,7 @@ class CognosOMIngester:
         for source_name in source_names:
             sanitized_mod = re.sub(r"[^a-zA-Z0-9_]+", "_", source_name).strip("_")
             for qs_name in sorted(qs_names):
-                data_model_fqns.append(f"{OM_SERVICE_NAME}.{sanitized_mod}__{qs_name}")
+                data_model_fqns.append(f"{OM_SERVICE_NAME}.model.{sanitized_mod}__{qs_name}")
         if data_model_fqns:
             log.info("    DataModels verknüpft: %s", ", ".join(data_model_fqns))
 
