@@ -22,9 +22,12 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 from airflow import DAG
+from airflow.datasets import Dataset
 from airflow.models import Variable
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.trino.hooks.trino import TrinoHook
+
+OUTLET_WEATHER_HOURLY = Dataset("trino://trino:8080/iceberg/raw/weather_hourly")
 
 
 BUCKET = "lakehouse"
@@ -222,6 +225,7 @@ with DAG(
     t2 = PythonOperator(
         task_id="backfill_to_raw",
         python_callable=backfill_to_raw,
+        outlets=[OUTLET_WEATHER_HOURLY],
     )
 
     t1 >> t2

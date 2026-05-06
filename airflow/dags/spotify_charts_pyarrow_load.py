@@ -25,8 +25,11 @@ import tempfile
 from datetime import datetime, timedelta
 
 from airflow import DAG
+from airflow.datasets import Dataset
 from airflow.models import Variable
 from airflow.providers.standard.operators.python import PythonOperator
+
+OUTLET_SPOTIFY_CHARTS = Dataset("trino://trino:8080/iceberg/raw/spotify_charts")
 
 BUCKET = "lakehouse"
 CHARTS_KEY = "landing/csv/spotify/charts/spotify_charts.csv"
@@ -222,4 +225,5 @@ with DAG(
     PythonOperator(
         task_id="load_charts_to_raw_pyarrow",
         python_callable=load_charts_pyarrow,
+        outlets=[OUTLET_SPOTIFY_CHARTS],
     )

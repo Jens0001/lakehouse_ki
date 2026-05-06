@@ -40,6 +40,7 @@ RUN pip install --no-cache-dir \
     "apache-airflow-providers-postgres>=5,<6" \
     "psycopg2-binary" \
     "apache-airflow-providers-jdbc>=4,<5" \
+    "apache-airflow-providers-openlineage>=2,<3" \
     "JayDeBeApi" \
     "JPype1"
 
