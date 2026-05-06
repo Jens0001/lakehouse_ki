@@ -863,8 +863,7 @@ class CognosOMIngester:
             "displayName": f"{qs_label} ({module_label})",
             "description": description,
             "service": OM_SERVICE_NAME,
-            "dataModelType": "Other",
-            "serviceType": "CustomDashboard",
+            "dataModelType": "CustomDashboard",
             "columns": columns,
         }
 
@@ -1104,7 +1103,6 @@ class CognosOMIngester:
                 "displayName": widget.get("name", widget.get("id", "")),
                 "description": f"**Dashboard**: {dash_name}\n**Typ**: {widget.get('chartType', 'Other')}",
                 "service": OM_SERVICE_NAME,
-                "serviceType": "CustomDashboard",
                 "chartType": widget.get("chartType", "Other"),
             }
             try:
@@ -1151,7 +1149,6 @@ class CognosOMIngester:
             "displayName": dash_name,
             "description": description,
             "service": OM_SERVICE_NAME,
-            "serviceType": "CustomDashboard",
             "charts": [{"fullyQualifiedName": fqn} for fqn in chart_fqns],
             "dataModels": [{"fullyQualifiedName": fqn} for fqn in data_model_fqns],
         }
