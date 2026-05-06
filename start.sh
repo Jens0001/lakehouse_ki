@@ -165,6 +165,7 @@ mkdir -p ./airflow/logs 2>/dev/null || true
 mkdir -p ./dbt/target 2>/dev/null || true
 mkdir -p ./dbt/logs 2>/dev/null || true
 mkdir -p /dbt/dbt_packages 2>/dev/null || true
+mkdir -p ./cognos/api_exports 2>/dev/null || true
 
 # Airflow DAG- und Logs-Verzeichnis müssen vom airflow-User (im Container)
 # beschreibbar sein. Setze auf 777 um Permission-Probleme zu vermeiden.
@@ -182,6 +183,12 @@ fi
 if [ -d "./dbt" ]; then
   sudo find ./dbt -not -path '*/__pycache__/*' -exec chmod 777 {} + 2>/dev/null || true
   echo "  ✓ ./dbt: Berechtigungen auf 777 gesetzt (ignoriert: __pycache__)"
+fi
+
+# cognos/api_exports muss vom Airflow-Container (UID 50000) beschreibbar sein
+if [ -d "./cognos/api_exports" ]; then
+  find ./cognos/api_exports -exec chmod 777 {} + 2>/dev/null || true
+  echo "  ✓ ./cognos/api_exports: Berechtigungen auf 777 gesetzt"
 fi
 
 # Elasticsearch Wrapper-Script muss ausführbar sein (wird als Volume gemountet)

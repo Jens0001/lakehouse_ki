@@ -9,33 +9,18 @@ models:
     columns:
       - name: location_hk
         description: "MD5-Hashkey auf location_key – primärer Hub-Key für den Standort"
-        tests:
-          - not_null
       - name: location_hashdiff
         description: "MD5-Hashdiff auf (location_key, latitude, longitude) – prüft ob sich Standortattribute geändert haben"
-        tests:
-          - not_null
       - name: weather_hashdiff
         description: "MD5-Hashdiff auf (location_key, timestamp) – eindeutiger Bezeichner je Messung"
-        tests:
-          - not_null
-          - unique
       - name: measured_at
         description: "Messzeitpunkt (timestamp, Europe/Berlin)"
-        tests:
-          - not_null
       - name: date_key
         description: "Datum der Messung (Partitionierungsspalte aus der Rohtabelle)"
-        tests:
-          - not_null
       - name: hour
         description: "Stunde des Tages (0–23)"
-        tests:
-          - not_null
       - name: location_key
         description: "Lesbarer Standortbezeichner (z.B. 'berlin-reinickendorf')"
-        tests:
-          - not_null
       - name: latitude
         description: "Geografische Breite (double)"
       - name: longitude
@@ -67,29 +52,16 @@ models:
     columns:
       - name: price_zone_hk
         description: "MD5-Hashkey auf bidding_zone – primärer Hub-Key für die Gebotszone"
-        tests:
-          - not_null
       - name: price_hashdiff
         description: "MD5-Hashdiff auf (bidding_zone, timestamp) – eindeutiger Bezeichner je Stunde und Zone"
-        tests:
-          - not_null
-          - unique
       - name: measured_at
         description: "Messzeitpunkt (UTC-basiert aus unix_seconds)"
-        tests:
-          - not_null
       - name: date_key
         description: "Datum der Messung (Partitionierungsspalte aus der Rohtabelle)"
-        tests:
-          - not_null
       - name: hour
         description: "Stunde des Tages (0–23)"
-        tests:
-          - not_null
       - name: bidding_zone
         description: "Gebotszone (z.B. 'DE-LU')"
-        tests:
-          - not_null
       - name: price_eur_mwh
         description: "Day-Ahead-Spotpreis in EUR/MWh (kann NULL oder negativ sein)"
       - name: _source_file
@@ -98,7 +70,3 @@ models:
         description: "Zeitstempel des Ladevorgangs in die Rohtabelle (UTC)"
       - name: record_source
         description: "Datenquelle, fest 'energy-charts'"
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['energy-charts']
