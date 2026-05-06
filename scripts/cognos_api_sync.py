@@ -1177,25 +1177,36 @@ class CognosOMIngester:
             log.error("  ✗ Dashboard-Fehler: %s", exc)
             return
 
-        # Lineage: DataModel → Dashboard (explizite Kante für den Lineage-Graphen)
+        # Lineage: DataModel → Dashboard und Dashboard → Chart (explizit für Lineage-Graphen)
         dash_id = result.get("id", "")
         for dm_fqn in data_model_fqns:
             dm_entity = self.client.get(f"v1/dashboard/datamodels/name/{dm_fqn}")
             if not dm_entity:
                 log.warning("    ⚠ DataModel nicht gefunden für Lineage: %s", dm_fqn)
                 continue
-            lineage_payload = {
-                "edge": {
+            try:
+                self.client.put("v1/lineage", {"edge": {
                     "fromEntity": {"id": dm_entity["id"], "type": "dashboardDataModel"},
                     "toEntity":   {"id": dash_id,          "type": "dashboard"},
-                }
-            }
-            try:
-                self.client.put("v1/lineage", lineage_payload)
+                }})
                 self._lineage += 1
                 log.info("    → Lineage: %s → Dashboard", dm_fqn)
             except urllib.error.HTTPError as exc:
                 log.warning("    ⚠ Lineage-Fehler DataModel→Dashboard %s: %s", dm_fqn, exc)
+
+        for chart_ref in result.get("charts", []):
+            chart_id = chart_ref.get("id", "")
+            if not chart_id:
+                continue
+            try:
+                self.client.put("v1/lineage", {"edge": {
+                    "fromEntity": {"id": dash_id,   "type": "dashboard"},
+                    "toEntity":   {"id": chart_id,  "type": "chart"},
+                }})
+                self._lineage += 1
+                log.info("    → Lineage: Dashboard → %s", chart_ref.get("name", chart_id))
+            except urllib.error.HTTPError as exc:
+                log.warning("    ⚠ Lineage-Fehler Dashboard→Chart %s: %s", chart_id, exc)
 
 
 # ---------------------------------------------------------------------------
