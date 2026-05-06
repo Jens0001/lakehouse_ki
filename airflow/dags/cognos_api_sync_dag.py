@@ -9,16 +9,21 @@ Ablauf:
   2. ingest_dashboards – legt OM Dashboards + Charts an und verknüpft sie mit den
                          Data Models aus Schritt 1 (über das dataModels[]-Feld).
 
-Konfiguration (alle Werte aus .env via docker-compose.yml):
-  om_bot_token      – Airflow Variable; aus OPENMETADATA_INGESTION_BOT_TOKEN, wird von
-                      start.sh automatisch befüllt
-  COGNOS_USERNAME   – Container-Env-Variable; leer lassen wenn Cognos anonym erlaubt
-  COGNOS_PASSWORD   – Container-Env-Variable; leer lassen wenn Cognos anonym erlaubt
+Konfiguration – alle URLs und Credentials kommen aus dem Container-Environment
+(gesetzt in docker-compose.yml aus .env), kein Hardcoding im DAG:
+  COGNOS_URL        – Cognos REST API Basis-URL (aus .env)
+  COGNOS_USERNAME   – Cognos-Benutzer (aus .env, leer = anonymer Zugriff)
+  COGNOS_PASSWORD   – Cognos-Passwort (aus .env, leer = anonymer Zugriff)
+  OM_URL            – OpenMetadata intern: http://openmetadata-server:8585/api
+                      (in docker-compose.yml fix gesetzt, nicht aus .env –
+                       .env OM_URL zeigt auf externe URL, die im Container nicht gilt)
+  om_bot_token      – Airflow Variable; Token wird von start.sh nach Stack-Start
+                      in .env geschrieben und per AIRFLOW_VAR_OM_BOT_TOKEN bereitgestellt
 
 Voraussetzungen:
-  - Cognos Analytics erreichbar unter COGNOS_URL (192.168.178.149:9300).
-  - Trino-Service 'lakehouse_trino' in OM bereits crawled (für Lineage-Kanten).
-  - start.sh wurde nach Stack-Start ausgeführt (setzt om_bot_token).
+  - Cognos Analytics erreichbar unter COGNOS_URL.
+  - Trino-Service 'lakehouse_trino' in OM bereits gecrawlt (für Lineage-Kanten).
+  - start.sh wurde nach Stack-Start ausgeführt (befüllt om_bot_token).
 """
 
 from datetime import datetime
@@ -27,19 +32,13 @@ from airflow import DAG
 from airflow.providers.standard.operators.bash import BashOperator
 
 SCRIPT_PATH = "/opt/airflow/scripts/cognos_api_sync.py"
-COGNOS_URL  = "http://192.168.178.149:9300/api/v1"
-OM_URL      = "http://openmetadata-server:8585/api"
 EXPORT_DIR  = "/opt/airflow/cognos/api_exports"
 
-# Umgebungsvariablen für beide Tasks.
-# OM_TOKEN: Airflow Variable "om_bot_token" (aus OPENMETADATA_INGESTION_BOT_TOKEN, gesetzt von start.sh)
-# COGNOS_USERNAME / COGNOS_PASSWORD: direkt aus Container-Env (gesetzt via docker-compose aus .env)
-_ENV = (
-    f'COGNOS_URL="{COGNOS_URL}" '
-    f'OM_URL="{OM_URL}" '
-    f'EXPORT_DIR="{EXPORT_DIR}" '
-    'OM_TOKEN="{{ var.value.om_bot_token }}"'
-)
+# COGNOS_URL, COGNOS_USERNAME, COGNOS_PASSWORD und OM_URL liegen bereits im
+# Container-Environment (docker-compose.yml). Der BashOperator erbt sie automatisch.
+# Einzig OM_TOKEN wird separat injiziert, da start.sh das Token erst nach
+# Container-Start setzt und es über die Airflow Variable "om_bot_token" bereitstellt.
+_ENV = f'EXPORT_DIR="{EXPORT_DIR}" OM_TOKEN="{{{{ var.value.om_bot_token }}}}"'
 
 with DAG(
     dag_id="cognos_api_sync",

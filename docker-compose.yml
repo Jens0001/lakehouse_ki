@@ -161,10 +161,14 @@ services:
       # OpenMetadata ingestion-bot Token (wird von start.sh in .env geschrieben)
       # → macht das Token als Airflow Variable "om_bot_token" verfügbar (für cognos_api_sync_dag)
       - AIRFLOW_VAR_OM_BOT_TOKEN=${OPENMETADATA_INGESTION_BOT_TOKEN}
-      # Cognos Analytics Credentials (für cognos_api_sync_dag – direkt als Env-Vars, nicht als Airflow Variables,
-      # da cognos_api_sync.py sie über os.environ.get() liest)
+      # Cognos Analytics (für cognos_api_sync_dag – direkt als Env-Vars, da das Skript os.environ.get() nutzt)
+      - COGNOS_URL=${COGNOS_URL}
       - COGNOS_USERNAME=${COGNOS_USERNAME}
       - COGNOS_PASSWORD=${COGNOS_PASSWORD}
+      # OM_URL intern: immer der Docker-Service-Name, unabhängig von .env.
+      # .env OM_URL zeigt auf die externe URL (http://<EXTERNAL_HOST>:8585) – die ist aus dem
+      # Container heraus nicht zuverlässig erreichbar (localhost = Container selbst, nicht Host).
+      - OM_URL=http://openmetadata-server:8585/api
     # Airflow 3.x All-in-One Startup:
     # 1. DB migrieren (idempotent)
     # 2. Admin-User anlegen via FAB Security Manager (Airflow 3.x hat kein 'airflow users create')
