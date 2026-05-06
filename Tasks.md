@@ -227,9 +227,9 @@
       `/api/v1/openlineage/lineage` + ingestion-bot Bearer-Token. Token wird automatisch von
       `start.sh` beim Stack-Start aus der OM-API geholt und in `.env` gespeichert.
     - **Details**: Memory.md Eintrag 28, Changelog.md 04.05.2026
-    - [ ] **Explizite Lineage-Definition (inlets/outlets) in DAGs ergänzen**:
-      - `PythonOperator` kann keine Tabellen automatisch erkennen.
-      - In DAGs wie `energy_charts_to_raw.py` müssen `inlets` (S3-Pfad) und `outlets` (Iceberg-Tabelle) definiert werden, damit die Kanten in OM sichtbar werden.
+    - [x] **Explizite Lineage-Definition (outlets) in DAGs ergänzt** *(erledigt 06.05.2026)*:
+      - `open_meteo_to_raw` + `energy_charts_to_raw`: `outlets=[Dataset("trino://trino:8080/iceberg.raw.*")]`
+      - OpenLineage-Provider nimmt Outlets auf → OM verbindet DAG → Tabelle beim nächsten Run
   - **Was sichtbar wird**:
     - DAG `open_meteo_to_raw`: Runtime-Lineage pro Task-Run mit START/COMPLETE Events
     - DAG `energy_charts_to_raw`: analog
@@ -289,17 +289,17 @@
   - [ ] Dremio → Cognos Data Module: Bridge-Skript läuft, Data Module erscheint als letztes Glied im Lineage-Graph
   - [ ] Testfall: Spalte in `iceberg.raw` umbenennen → Impact-Analyse im Katalog zeigt alle betroffenen Downstream-Modelle inkl. Cognos Data Module
 
-- [ ] **Cognos Data Module → Katalog Bridge** *(letztes Lineage-Stück, kein nativer Connector)*
-  - Cognos emittiert keine OpenLineage-Events → Bridge-Skript nötig (~150 Zeilen Python)
-  - Skript liest Data Module JSON per Cognos REST API: `GET /api/v1/datamodules/{id}`
-  - Extrahiert und mapped:
-    - `tableSet` + `columnList` → Dataset + Schema im Katalog (inkl. Labels, Datentypen, `usage`-Rolle)
-    - `relationshipSet` → Join-Beziehungen als Katalog-Metadaten
-    - `hierarchySet` → Zeitdimension, Geografie etc. als Glossar-Terme oder Tags
-    - `query.sourceList` → Lineage-Kante `Dremio-Tabelle → Cognos Data Module`
-  - Ergebnis im Katalog: semantische Schicht (Labels, Rollen) + letzte Lineage-Kante sichtbar
-  - Ausführung als Airflow DAG täglich (kein Event-Trigger möglich, da Cognos kein OpenLineage kennt)
-  - **Wichtig**: Skript vor Katalog-Auswahl entwickeln – DataHub Python SDK und OpenMetadata REST API haben unterschiedliche Payload-Formate
+- [x] **Cognos Data Module → Katalog Bridge** *(erledigt 06.05.2026)*
+  - `scripts/cognos_api_sync.py` – vollständige Bridge via Cognos REST API + OpenMetadata REST API
+  - Cognos REST API: Session + XSRF-Token, Ordner-Traversal, Module- und Dashboard-Spec-Abruf
+  - Extrahiert und ingestiert:
+    - `querySubject[]` + `queryItem[]` → OM Dashboard Data Models (pro QS ein Model, Spalten mit Typ + Usage-Tags)
+    - `useSpec[].searchPath` → Lineage-Kante Trino-Tabelle → Data Model (`PUT /v1/lineage`)
+    - Widgets + Tabs → OM Charts + Dashboard mit `dataModels[]`-Referenz (Dashboard → Data Model)
+  - Ende-zu-Ende Lineage: `iceberg.*.*.<table>` → Data Model → Dashboard + Charts in OM sichtbar
+  - Idempotent (PUT-Upserts), `--dry-run`, `--list`, `--export-only` Modi
+  - Umgebungsvariablen: `COGNOS_URL`, `COGNOS_USERNAME`, `COGNOS_PASSWORD`, `COGNOS_FOLDER`, `OM_URL`, `OM_TOKEN`, `OM_TRINO_SVC`
+  - **Getestet**: 1 Modul (16 Query Subjects, 13+3 Tabellen in iceberg.business_vault/marts), 2 Dashboards gefunden und exportiert
 
 - [ ] **dbt-Exposures definieren** *(unabhängig vom Katalog sinnvoll)*
   - Dashboards und nachgelagerte Systeme als `exposures:` in schema.yml dokumentieren
@@ -425,6 +425,7 @@
 | 23.03 | **dbt-Metadaten in OpenMetadata** – Beschreibungen, Tags, Lineage (6 Nodes, 25 Edges) sichtbar |
 | 23.03 | **OM Ingestion-Pipelines** alle 3 getriggert und erfolgreich (Trino, Airflow, dbt) |
 | 23.03 | **EXTERNAL_HOST** – Remote-Zugriff via `start.sh` + `update-keycloak-redirects.sh` |
+| 06.05 | **Cognos API Bridge** – `scripts/cognos_api_sync.py`: REST-API-basierte Ingestion von Cognos Data Modules + Dashboards → OpenMetadata, inkl. Ende-zu-Ende Lineage Trino → Data Model → Dashboard |
 
 ---
 

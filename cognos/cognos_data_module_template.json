@@ -1,0 +1,399 @@
+{
+  "_template_documentation": {
+    "description": "Template for generating IBM Cognos Analytics Data Module JSON files. An LLM can use this template to produce valid data modules given database schema information (tables, columns, data types, relationships/foreign keys).",
+    "provenance": "IMPORTANT: This template was reverse-engineered from actual Cognos Analytics Data Module JSON exports. IBM does not publish a formal JSON schema specification for this format. The internal JSON structure (querySubject, queryItem, relationship, itemNormalization, etc.) is undocumented. IBM's official Data Modeling Guide only covers the UI-based workflow. An IBM support article (TS016870211) describes how to export Data Module specs as JSON but is behind a login wall and does not document the schema itself.",
+    "export_import_info": {
+      "export_via_ui": "In the Cognos Analytics Data Module editor, press Ctrl + / + Q to view/export the JSON specification of the current module.",
+      "export_via_rest_api": "GET /api/v1/content/{storeID}/items with appropriate headers returns module metadata. The REST API also supports importing metadata for schema objects.",
+      "import_validation": "After generating a module JSON, import it via the REST API or UI, then re-export via Ctrl+/+Q to verify Cognos interpreted the structure correctly. Compare the re-exported JSON against your generated version.",
+      "dashboard_spec_shortcut": "For dashboards, a similar shortcut exists: Ctrl + . (period) to view the dashboard specification."
+    },
+    "instructions": [
+      "1. Replace all {{PLACEHOLDER}} values with actual values.",
+      "2. Repeat array elements (marked with '_repeat_for_each') for each table/column/relationship.",
+      "3. Remove all keys starting with '_template_' or '_doc_' before final output.",
+      "4. Generate unique identifiers using the pattern 'i' + 32 hex chars (e.g., 'iA1B2C3D4E5F6...').",
+      "5. The 'use' array at top level must contain one generated ID matching the useSpec storeID pattern.",
+      "6. All idForExpression values follow the pattern: 'querySubjectIdentifier.itemIdentifier'.",
+      "7. Star schemas are the ideal database structure for data modules (per IBM documentation), but transactional schemas work too.",
+      "8. In Cognos terminology: 'query subjects' = tables/views, 'query items' = columns."
+    ],
+    "version_note": "The 'version' field (e.g., '22.0') is an internal schema version counter for the Data Module JSON format — it does NOT correspond to the Cognos Analytics product version (11.x, 12.x). This schema version has been stable across multiple Cognos product releases.",
+    "format": "Cognos Data Module JSON (exportable/importable via Cognos Analytics REST API or UI)"
+  },
+
+  "_doc_version": "Internal schema version of the Data Module JSON format. NOT the Cognos product version. Use '22.0' unless targeting an older Cognos installation. This version has been stable across Cognos 11.2.x and 12.x.",
+  "version": "22.0",
+  "container": "C",
+
+  "_doc_use": "Array with a single generated unique ID (hex, prefixed with 'i'). This references the useSpec entry.",
+  "use": [
+    "{{GENERATED_UNIQUE_ID}}"
+  ],
+
+  "useSpec": [
+    {
+      "identifier": "M1",
+      "type": "database",
+      "storeID": "i1374FAB5B01A4871A0973845C86B1E87",
+      "ancestors": [
+        {
+          "defaultName": "Postgres",
+          "storeID": "i6821DD61FE364DB1958C0000A3811E02"
+        },
+        {
+          "defaultName": "Postgres",
+          "storeID": "iD511A8C78429448685BA4A8C149AEDB7"
+        }
+      ],
+      "dataCacheExpiry": "3600",
+      "dataSourceOverride": {
+        "originalCMDataSource": "Postgres",
+        "originalCatalog": "",
+        "originalSchema": "dw",
+        "overrideCMDataSource": false,
+        "overrideCatalog": false,
+        "overrideSchema": false,
+        "cmDataSource": "Postgres",
+        "catalog": "",
+        "schema": "dw"
+      }
+    }
+  ],
+
+  "_doc_expressionLocale": "Locale for expressions. Use 'de-de' for German, 'en-us' for English, etc.",
+  "expressionLocale": "{{LOCALE}}",
+
+  "lastModified": "{{ISO8601_TIMESTAMP}}",
+
+  "_doc_querySubject": "Array of query subjects. Each query subject represents a database table or view, referenced via 'ref'.",
+  "querySubject": [
+
+    {
+      "_template_repeat_for_each": "DATABASE_TABLE_OR_VIEW",
+
+      "_doc_ref": "Reference to the physical table/view. Format: ['M1.{{table_name}}']. M1 matches the useSpec identifier.",
+      "ref": [
+        "M1.{{TABLE_NAME}}"
+      ],
+
+      "item": [
+        {
+          "_template_repeat_for_each": "COLUMN_IN_TABLE",
+
+          "queryItem": {
+            "_doc_expression": "The database column name exactly as it exists in the database.",
+            "expression": "{{COLUMN_NAME}}",
+
+            "_doc_usage": "One of: 'identifier' (dimension/attribute column) or 'fact' (measure/numeric column for aggregation).",
+            "usage": "{{identifier_OR_fact}}",
+
+            "_doc_datatype": "Cognos datatype mapping. Common values: INTEGER, BIGINT, DOUBLE, CHAR(n), VARCHAR(n), DATE, TIMESTAMP, TIME, BOOLEAN.",
+            "datatype": "{{COGNOS_DATATYPE}}",
+
+            "nullable": "{{true_OR_false}}",
+
+            "_doc_regularAggregate": "Default aggregation. 'countDistinct' for identifiers, 'total' (=SUM) for facts. Other options: 'average', 'maximum', 'minimum', 'count', 'none'.",
+            "regularAggregate": "{{countDistinct_OR_total}}",
+
+            "_doc_datatypeCategory": "High-level category: 'number', 'string', 'datetime'.",
+            "datatypeCategory": "{{number_OR_string_OR_datetime}}",
+
+            "_doc_highlevelDatatype": "More specific type hint: 'integer', 'decimal', 'string', 'date', 'datetime', 'time'.",
+            "highlevelDatatype": "{{integer_OR_decimal_OR_string_OR_date_OR_datetime_OR_time}}",
+
+            "_doc_facetDefinition": "'automatic' for identifiers (enables filtering in dashboards), 'false' for facts.",
+            "facetDefinition": {
+              "enabled": "{{automatic_OR_false}}"
+            },
+
+            "_doc_taxonomy_optional": "Optional. Assigns Cognos time intelligence classification. Only for date/time related columns. Enables automatic time-based drill-down and filtering. Omit entirely for non-temporal columns.",
+            "_doc_taxonomy_classes_and_families": {
+              "cTime": {
+                "cDate": "Full date column",
+                "cYear": "Year column or year-level attribute",
+                "cMonth": "Month name or month-level attribute",
+                "cQuarter": "Quarter attribute",
+                "cWeek": "Week attribute",
+                "cDay": "Day name, day-of-month, day-of-week, day-of-year",
+                "cHour": "Hour attribute",
+                "cMinute": "Minute attribute",
+                "cSecond": "Second attribute"
+              },
+              "cNone/cNone": "Explicitly suppress auto-classification (e.g., for TIME columns that should not be treated as temporal dimensions)"
+            },
+            "taxonomy": [
+              {
+                "domain": "cognos",
+                "class": "{{cTime_OR_cNone}}",
+                "family": "{{cDate_OR_cYear_OR_cMonth_etc}}"
+              }
+            ],
+
+            "identifier": "{{COLUMN_IDENTIFIER}}",
+
+            "_doc_label": "Display name shown in Cognos UI. Can differ from identifier for user-friendly naming (e.g., German labels).",
+            "label": "{{DISPLAY_LABEL}}",
+
+            "idForExpression": "{{TABLE_IDENTIFIER}}.{{COLUMN_IDENTIFIER}}",
+
+            "_doc_propertyOverride_optional": "Only needed when label or other properties differ from database defaults.",
+            "propertyOverride": [
+              "property._MUI_propertySetByUser_label",
+              "label"
+            ],
+            "property": [
+              {
+                "name": "_MUI_propertySetByUser_label",
+                "value": "\"true\""
+              }
+            ],
+
+            "_doc_hidden_optional": "Set to true to hide column from end users (e.g., surrogate keys). Omit if column should be visible.",
+            "hidden": false
+          }
+        }
+      ],
+
+      "_doc_itemNormalization_optional": "Defines primary key and functional dependencies. Include for dimension tables to optimize query generation. Omit for fact tables/views.",
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "_doc_itemRef": "Column identifier of the primary key column.",
+              "itemRef": "{{PK_COLUMN_IDENTIFIER}}",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "_doc_attribute": "All non-key columns that are functionally dependent on the key. Each uses 'minimum' as sqlOperator.",
+            "attribute": [
+              {
+                "_template_repeat_for_each": "NON_KEY_COLUMN",
+                "itemRef": "{{COLUMN_IDENTIFIER}}",
+                "sqlOperator": "minimum"
+              }
+            ],
+            "identifier": "grp_4_PK_{{PK_COLUMN_IDENTIFIER}}",
+            "label": "primary key: {{PK_COLUMN_IDENTIFIER}}"
+          }
+        ]
+      },
+
+      "_doc_rowCount_optional": "Approximate row count. Helps Cognos query optimizer. Can be omitted.",
+      "rowCount": "{{OPTIONAL_ROW_COUNT}}",
+
+      "identifier": "{{TABLE_IDENTIFIER}}",
+      "label": "{{TABLE_DISPLAY_LABEL}}",
+
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "{{TABLE_IDENTIFIER}}",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":{{X_POSITION}},\"y\":{{Y_POSITION}}}"
+        }
+      ]
+    }
+  ],
+
+  "_doc_relationship": "Defines joins between query subjects. Each relationship connects two query subjects via one or more column pairs.",
+  "relationship": [
+    {
+      "_template_repeat_for_each": "FOREIGN_KEY_RELATIONSHIP",
+
+      "_doc_cardinality": "mincard/maxcard define the join cardinality. Typical patterns: 1:N dimension-to-fact = left(one,one) right(one,many). For N:M use (one,many) on both sides.",
+      "left": {
+        "ref": "{{LEFT_TABLE_IDENTIFIER}}",
+        "mincard": "one",
+        "maxcard": "{{one_OR_many}}"
+      },
+      "right": {
+        "ref": "{{RIGHT_TABLE_IDENTIFIER}}",
+        "mincard": "one",
+        "maxcard": "{{one_OR_many}}"
+      },
+
+      "_doc_link": "Column pairs for the join condition. Multiple entries = composite key join.",
+      "link": [
+        {
+          "_template_repeat_for_each": "JOIN_COLUMN_PAIR",
+          "leftRef": "{{LEFT_COLUMN_IDENTIFIER}}",
+          "rightRef": "{{RIGHT_COLUMN_IDENTIFIER}}",
+          "_doc_comparisonOperator": "Usually 'equalTo'. Other options: 'lessThan', 'greaterThan', 'lessThanOrEqualTo', 'greaterThanOrEqualTo', 'notEqualTo'.",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+
+      "_doc_joinFilterType": "'none' for inner/standard join behavior. 'outerFullBody' for full outer join. 'outerLeftBody' for left outer join. 'outerRightBody' for right outer join. Default should be 'none' for star schema relationships.",
+      "joinFilterType": "none",
+
+      "_doc_identifier_convention": "Convention: leftTable_rightTable",
+      "identifier": "{{LEFT_TABLE_IDENTIFIER}}_{{RIGHT_TABLE_IDENTIFIER}}",
+      "label": "{{LEFT_TABLE_IDENTIFIER}}<-->{{RIGHT_TABLE_IDENTIFIER}}",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "{{LEFT_TABLE_IDENTIFIER}}_{{RIGHT_TABLE_IDENTIFIER}}"
+    }
+  ],
+
+  "_doc_metadataTreeView": "Defines which query subjects appear in the Cognos module tree and in what order. List all query subjects here.",
+  "metadataTreeView": [
+    {
+      "folderItem": [
+        {
+          "_template_repeat_for_each": "QUERY_SUBJECT",
+          "ref": "{{TABLE_IDENTIFIER}}"
+        }
+      ]
+    }
+  ],
+
+  "_doc_drillGroup_optional": "Defines drill-down hierarchies for interactive exploration. Typical use: Year > Month > Date. Each segment references a column from a query subject.",
+  "drillGroup": [
+    {
+      "_template_repeat_for_each": "DRILL_HIERARCHY",
+      "segment": [
+        {
+          "_template_repeat_for_each": "DRILL_LEVEL_TOP_TO_BOTTOM",
+          "ref": "{{TABLE_IDENTIFIER}}.{{COLUMN_IDENTIFIER}}",
+          "identifier": "{{COLUMN_IDENTIFIER}}",
+          "label": "{{DISPLAY_LABEL}}",
+          "propertyOverride": [
+            "NEW",
+            "label"
+          ]
+        }
+      ],
+      "identifier": "{{DRILL_GROUP_IDENTIFIER}}",
+      "label": "{{DRILL_GROUP_LABEL}}",
+      "propertyOverride": [
+        "NEW",
+        "label"
+      ],
+      "idForExpression": "{{DRILL_GROUP_IDENTIFIER}}"
+    }
+  ],
+
+  "parameterValueSet": [
+    {
+      "identifier": "_default",
+      "propertyOverride": [
+        "NEW"
+      ]
+    }
+  ],
+
+  "_doc_dataRetrievalMode": "Controls how data is fetched. 'liveConnection' = queries run directly against the data source in real time. Alternative: 'simpleDataset' for snapshot-based data sets (uploaded files, cached copies).",
+  "dataRetrievalMode": "liveConnection",
+  "refActiveParameterValueSet": "_default",
+
+  "_doc_module_identifier": "Unique identifier for the module. Convention: 'C_' prefix + descriptive name.",
+  "identifier": "C_{{MODULE_NAME}}",
+  "label": "{{MODULE_DISPLAY_LABEL}}",
+
+  "propertyOverride": [
+    "refActiveParameterValueSet",
+    "identifier",
+    "label",
+    "property._MUI_diagramZoomAndPan"
+  ],
+  "property": [
+    {
+      "name": "_MUI_diagramZoomAndPan",
+      "value": "{\"scale\":1.0,\"translate\":[0,0]}"
+    }
+  ],
+
+
+  "_template_reference_tables": {
+
+    "_doc_datatype_mapping": "Map database-specific SQL types to Cognos types. The Cognos data type names are used in the 'datatype' field of queryItems.",
+    "datatype_mapping": {
+      "PostgreSQL_to_Cognos": {
+        "integer / int4": "INTEGER",
+        "bigint / int8": "BIGINT",
+        "smallint / int2": "SMALLINT",
+        "double precision / float8": "DOUBLE",
+        "real / float4": "REAL",
+        "numeric(p,s) / decimal(p,s)": "DECIMAL(p,s)",
+        "boolean": "BOOLEAN",
+        "char(n)": "CHAR(n)",
+        "varchar(n)": "VARCHAR(n)",
+        "text": "VARCHAR(8192)",
+        "date": "DATE",
+        "timestamp / timestamp without time zone": "TIMESTAMP",
+        "time / time without time zone": "TIME"
+      },
+      "DB2_to_Cognos": {
+        "INTEGER": "INTEGER",
+        "BIGINT": "BIGINT",
+        "SMALLINT": "SMALLINT",
+        "DOUBLE": "DOUBLE",
+        "REAL": "REAL",
+        "DECIMAL(p,s)": "DECIMAL(p,s)",
+        "CHAR(n)": "CHAR(n)",
+        "VARCHAR(n)": "VARCHAR(n)",
+        "CLOB": "VARCHAR(8192)",
+        "DATE": "DATE",
+        "TIMESTAMP": "TIMESTAMP",
+        "TIME": "TIME"
+      },
+      "Oracle_to_Cognos": {
+        "NUMBER (no scale)": "INTEGER",
+        "NUMBER(p,s)": "DECIMAL(p,s)",
+        "FLOAT": "DOUBLE",
+        "BINARY_DOUBLE": "DOUBLE",
+        "BINARY_FLOAT": "REAL",
+        "CHAR(n)": "CHAR(n)",
+        "VARCHAR2(n)": "VARCHAR(n)",
+        "CLOB": "VARCHAR(8192)",
+        "DATE": "TIMESTAMP",
+        "TIMESTAMP": "TIMESTAMP",
+        "_note": "Oracle DATE includes time component, so it maps to TIMESTAMP in Cognos"
+      }
+    },
+
+    "_doc_usage_rules": "Rules for setting 'usage' on queryItems:",
+    "usage_rules": {
+      "identifier": "Dimension/attribute columns: primary keys, foreign keys, descriptive text, dates used for grouping, categorical values.",
+      "fact": "Measure columns: numeric values that should be aggregated (sums, averages, counts). Typically amounts, quantities, scores, monetary values."
+    },
+
+    "_doc_aggregate_rules": "Rules for setting 'regularAggregate':",
+    "aggregate_rules": {
+      "countDistinct": "Default for 'identifier' usage columns.",
+      "total": "Default for 'fact' usage columns (equivalent to SUM).",
+      "average": "Use for columns where average makes more sense than sum (e.g., rates, percentages, temperatures).",
+      "minimum": "Use for columns where min is the natural aggregation.",
+      "maximum": "Use for columns where max is the natural aggregation.",
+      "none": "Use when no aggregation should be applied."
+    },
+
+    "_doc_cardinality_patterns": "Common relationship cardinality patterns:",
+    "cardinality_patterns": {
+      "dimension_to_fact_1_to_N": {
+        "left_dim": { "mincard": "one", "maxcard": "one" },
+        "right_fact": { "mincard": "one", "maxcard": "many" },
+        "description": "Standard star schema: one dimension row relates to many fact rows."
+      },
+      "fact_to_dimension_N_to_1": {
+        "left_fact": { "mincard": "one", "maxcard": "many" },
+        "right_dim": { "mincard": "one", "maxcard": "one" },
+        "description": "Reverse direction: fact on left, dimension on right. Same logical relationship."
+      }
+    },
+
+    "_doc_layout_algorithm": "For diagram node positions, use a star schema layout (IBM's recommended structure for data modules). Dimension tables radiate outward from central fact tables:",
+    "layout_suggestion": {
+      "star_schema_note": "Per IBM documentation: 'Star schemas are the ideal database structure for data modules but transactional schemas are equally supported.' Position dimension tables around the central fact table(s) for optimal readability in the Cognos diagram view.",
+      "dimensions_row_y": 300,
+      "facts_row_y": 500,
+      "x_spacing": 250,
+      "start_x": 200
+    }
+  }
+}

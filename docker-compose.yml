@@ -116,6 +116,9 @@ services:
       # Init-Scripts: User-Erstellung + Connections (Airflow 3.x hat kein 'airflow users create' CLI mehr)
       - ./scripts/airflow_init_users.py:/opt/airflow/scripts/airflow_init_users.py:ro
       - ./scripts/airflow_init_connections.py:/opt/airflow/scripts/airflow_init_connections.py:ro
+      # Cognos API Sync: Bridge-Skript + Export-Verzeichnis
+      - ./scripts/cognos_api_sync.py:/opt/airflow/scripts/cognos_api_sync.py:ro
+      - ./cognos/api_exports:/opt/airflow/cognos/api_exports
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__CORE__DAGS_FOLDER=/opt/airflow/dags
@@ -155,6 +158,13 @@ services:
       # Spotify API Credentials (für spotify_artist_update DAG)
       - AIRFLOW_VAR_SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
       - AIRFLOW_VAR_SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+      # OpenMetadata ingestion-bot Token (wird von start.sh in .env geschrieben)
+      # → macht das Token als Airflow Variable "om_bot_token" verfügbar (für cognos_api_sync_dag)
+      - AIRFLOW_VAR_OM_BOT_TOKEN=${OPENMETADATA_INGESTION_BOT_TOKEN}
+      # Cognos Analytics Credentials (für cognos_api_sync_dag – direkt als Env-Vars, nicht als Airflow Variables,
+      # da cognos_api_sync.py sie über os.environ.get() liest)
+      - COGNOS_USERNAME=${COGNOS_USERNAME}
+      - COGNOS_PASSWORD=${COGNOS_PASSWORD}
     # Airflow 3.x All-in-One Startup:
     # 1. DB migrieren (idempotent)
     # 2. Admin-User anlegen via FAB Security Manager (Airflow 3.x hat kein 'airflow users create')

@@ -301,94 +301,105 @@ Mit OpenLineage:    DAG ──✅──▶ iceberg.raw ──✅──▶ stg �
 
 ### Cognos Data Module → Katalog Bridge
 
-Cognos Analytics kennt kein OpenLineage. Das letzte Stück der Lineage-Kette (Trino-Tabellen → Cognos Data Module → Cognos Dashboard) sowie die semantische Schicht (Labels, Rollen, Hierarchien, Visualisierungen) landen daher **nicht automatisch** im Katalog. Das Skript `scripts/cognos_to_openmetadata.py` schließt diese Lücke.
+Cognos Analytics kennt kein OpenLineage. Das letzte Stück der Lineage-Kette (Trino-Tabellen → Cognos Data Module → Cognos Dashboard) sowie die semantische Schicht (Labels, Rollen, Hierarchien, Visualisierungen) landen daher **nicht automatisch** im Katalog. Das Skript `scripts/cognos_api_sync.py` schließt diese Lücke – vollständig über die Cognos REST API, ohne manuelle JSON-Exporte.
+
+#### Architektur-Überblick
+
+```
+Cognos Analytics REST API          cognos_api_sync.py              OpenMetadata REST API
+──────────────────────────         ──────────────────              ─────────────────────
+POST /api/v1/sessions ──────────→  Session + XSRF-Token
+GET  /api/v1/content ───────────→  Ordner-Traversal
+GET  /api/v1/content/{id}/items →  Module + Dashboards finden
+GET  /api/v1/content/{id} ──────→  Spezifikation abrufen
+                                           │
+                              ┌────────────┴────────────┐
+                              ▼                         ▼
+                     Datenmodul-Ingestion       Dashboard-Ingestion
+                     (querySubject[])           (Widgets + Tabs)
+                              │                         │
+                              ▼                         ▼
+                   PUT /v1/dashboardDataModels   PUT /v1/dashboards
+                   PUT /v1/charts (pro Spalte)   PUT /v1/charts (pro Widget)
+                   PUT /v1/lineage               (dataModels[] Referenz)
+                   (Trino-Tabelle → DataModel)
+```
 
 #### Was das Skript tut
 
-Das Skript liest zwei Arten von Cognos Analytics JSON-Exporten und macht sie für OpenMetadata "lesbar":
+**1. Datenmodul-Ingestion** (Cognos Data Module → OM Dashboard Data Models)
 
-**1. Datenmodul-Ingestion** (Data Module JSON → OM Dashboard Data Models)
+Das Cognos Data Module beschreibt die semantische Schicht über den physischen Tabellen. Das Skript liest die Spezifikation direkt per REST API und übersetzt sie in OpenMetadata-Entitäten:
 
-Das Cognos Data Module beschreibt die semantische Schicht über den physischen Tabellen: welche Spalten es gibt, welche Rolle sie haben (Identifier / Attribute / Measure), wie Tabellen verknüpft sind und welche Drill-Hierarchien existieren. Das Skript übersetzt diese Informationen in OpenMetadata-Entitäten:
-
-```
-  Cognos Data Module JSON           cognos_to_openmetadata.py          OpenMetadata
-  ─────────────────────             ───────────────────────            ─────────────
-  querySubject[] ─────────────────→ Dashboard Data Model (pro QS)
-    └─ queryItem[] ───────────────→   Columns (Name, Typ, Tags)
-        └─ usage ─────────────────→   Classification-Tag (Identifier/Attribute/Measure)
-        └─ datatype ──────────────→   OM dataType (BIGINT→BIGINT, VARCHAR→VARCHAR, …)
-        └─ regularAggregate ──────→   Beschreibungs-Feld (Aggregation: total/count/…)
-  relationship[] ─────────────────→ Markdown-Beschreibung (Join-Spalten, Kardinalitäten)
-  drillGroup[] ───────────────────→ Markdown-Beschreibung (Hierarchie-Stufen)
-  useSpec.dataSourceOverride ─────→ Lineage-Kante: Trino-Tabelle → Data Model
-```
-
-| Data Module JSON | OpenMetadata Entität |
+| Cognos Data Module | OpenMetadata Entität |
 |---|---|
 | `querySubject[]` (pro Tabelle/View) | Dashboard Data Model mit Spalten + Usage-Tags |
 | `querySubject[].item[]` (Spalten) | Columns mit Datentyp-Mapping, Usage-Klassifikation |
-| `relationship[]` (Joins, Kardinalitäten) | Markdown-Beschreibung am Data Model |
-| `drillGroup[]` (Drill-Down-Hierarchien) | Markdown-Beschreibung (z.B. Minute → Stunde → Tag → Monat → Jahr) |
-| `customSort[]` (benutzerdef. Sortierungen) | Dokumentiert in der Modul-Beschreibung |
-| `useSpec.dataSourceOverride` (Trino-Katalog/Schema) | Lineage-Kante: `lakehouse_trino.iceberg.smarthome.<table>` → Data Model |
+| `queryItem.usage` (Identifier/Attribute/Measure) | Classification-Tag `CognosAnalytics.*` |
+| `useSpec[].searchPath` (Catalog/Schema-Pfad) | Lineage-Kante: `lakehouse_trino.<catalog>.<schema>.<table>` → Data Model |
+| `querySubject[].ref[]` (Tabellenbezug) | Physische Tabellenname für Lineage-FQN |
 
-**2. Dashboard-Ingestion** (Dashboard JSON → OM Dashboard + Charts)
+**2. Dashboard-Ingestion** (Cognos Dashboard → OM Dashboard + Charts)
 
-Das Cognos Dashboard JSON beschreibt die Visualisierungsschicht: welche Tabs/Seiten ein Dashboard hat, welche Widgets (Charts) darauf liegen und welche Spalten aus dem Datenmodul jedes Widget verwendet. Das Skript übersetzt dies in OpenMetadata Dashboard- und Chart-Entitäten:
+Moderne Cognos-Dashboards haben den API-Typ `exploration`. Das Skript durchsucht die rekursive Widget-Hierarchie nach Visualisierungen und Datenbezügen:
 
-```
-  Cognos Dashboard JSON             cognos_to_openmetadata.py          OpenMetadata
-  ─────────────────────             ───────────────────────            ─────────────
-  layout.items[] (Tabs) ─────────→ Dashboard (mit Tab-Übersicht)
-    └─ items[] (Widgets) ────────→   Charts (Name, Typ, Beschreibung)
-        └─ visId ────────────────→   chartType (bundlecolumn→Bar, rave2line→Line, …)
-        └─ dataViews[].dataItems →   Referenzierte Spalten (→ Lineage zu Data Models)
-  dataSources.sources[] ─────────→ Zuordnung: Dashboard → Datenmodul (über name-Match)
-```
-
-| Dashboard JSON | OpenMetadata Entität |
+| Cognos Dashboard JSON | OpenMetadata Entität |
 |---|---|
-| `layout.items[]` (Tabs/Seiten) | Dashboard mit Beschreibung der Tab-Struktur |
-| Widget `features.Models_internal` | Chart (Name, chartType, referenzierte Spalten) |
-| `dataSources.sources[].name` | Verknüpfung zum Datenmodul (name-Match → `dataModels`-Referenz) |
-| `features.MetadataLoader.metadataSubsetIds` | Gesamtliste aller im Dashboard genutzten Spalten |
+| `layout.items[]` (Tabs/Seiten) | Dashboard-Beschreibung mit Tab-Übersicht |
+| `layout.items[].items[]` (Widgets) | Charts (Name, chartType, referenzierte Spalten) |
+| `widget.visId` | chartType-Mapping (bundlecolumn→Bar, rave2line→Line, …) |
+| `widget.columns[]` (Format: `querySubject.column`) | Spaltenreferenzen → dataModels-FQN Konstruktion |
+| `dataSources.sources[].name` | Verknüpfung: Dashboard.`dataModels[]` → Data Model FQN |
 
 **3. Ende-zu-Ende Lineage**
 
 Durch die Kombination beider Ingestions entsteht die vollständige Lineage-Kette in OpenMetadata:
 
 ```
-Trino-Tabelle (iceberg.smarthome.dim_tag)
-    │ Lineage-Kante (automatisch)
+iceberg.business_vault.fact_energy_price_hourly   (Trino-Tabelle)
+    │  PUT /v1/lineage  (table → dashboardDataModel)
     ▼
-Dashboard Data Model (dim_tag – semantische Schicht)
-    │ dataModels-Referenz (automatisch)
+cognos_analytics.Lakehouse_KI__fact_energy_price_hourly   (OM Dashboard Data Model)
+    │  Dashboard.dataModels[] Referenz
     ▼
-Dashboard (Jahresauswertung Heizkosten Lakehouse)
-    │ charts-Referenz (automatisch)
+cognos_analytics.strompreis_durchschniitt   (OM Dashboard)
+    │  Dashboard.charts[] Referenz
     ▼
-Chart (Heizkosten Inkl Warmwasser – Bar-Chart)
+cognos_analytics.strompreis_durchschniitt.Verlauf_Strompreis   (OM Chart)
 ```
 
 #### Implementierung
 
-**Skript**: `scripts/cognos_to_openmetadata.py`
-- Reine Python-Stdlib (urllib, json, argparse) – keine externen Abhängigkeiten
+**Skript**: `scripts/cognos_api_sync.py`
+- Reine Python-Stdlib (urllib, json, argparse, re, dataclasses) – keine externen Abhängigkeiten
 - Idempotent: PUT-basierte Upserts, beliebig oft ausführbar
-- `--dry-run` zum Validieren ohne API-Calls, `-v` für Debug-Ausgaben
-- Umgebungsvariablen: `OM_URL`, `OM_TOKEN`, `OM_TRINO_SVC`
+- Modi: `--list` (nur anzeigen), `--export-only` (JSON exportieren, kein OM), `--dry-run` (OM simulieren), `-v` (Debug)
+- Exportiert rohe API-Antworten nach `cognos/api_exports/` für Debugging
 
-**Airflow DAG**: `airflow/dags/cognos_to_openmetadata_dag.py`
-- Täglicher Lauf um 06:00 UTC
-- Liest Datenmodul- und Dashboard-JSON aus `/opt/airflow/cognos_exports/`
-- Task-Reihenfolge: Datenmodul zuerst (erstellt Data Models), dann Dashboard (referenziert Data Models)
+**Umgebungsvariablen**:
+
+| Variable | Standard | Beschreibung |
+|---|---|---|
+| `COGNOS_URL` | `http://192.168.178.149:9300/api/v1` | Cognos REST API Basis-URL |
+| `COGNOS_USERNAME` | – | Cognos-Benutzer |
+| `COGNOS_PASSWORD` | – | Cognos-Passwort |
+| `COGNOS_FOLDER` | `Lakehouse` | Startordner für die Suche |
+| `OM_URL` | `http://localhost:8585/api` | OpenMetadata API Basis-URL |
+| `OM_TOKEN` | – | OpenMetadata Bearer-Token |
+| `OM_TRINO_SVC` | `lakehouse_trino` | Trino-Service-FQN für Lineage-Konstruktion |
+| `EXPORT_DIR` | `cognos/api_exports` | Zielverzeichnis für JSON-Exporte |
+
+**Bekannte Eigenheiten der Cognos REST API** (dokumentiert in Memory.md):
+- Alle GET-Requests auf `/content/*` erfordern `X-XSRF-Token` Header (aus `XSRF-TOKEN` Cookie nach Login)
+- Cognos gibt Listen unter Key `"content"` zurück (nicht `"items"` oder `"entries"`)
+- Moderne Dashboards haben `type = "exploration"` (nicht `"dashboard"`)
+- `GET /content/{id}?fields=specification` liefert `specification` als JSON-String (nicht Objekt) – muss mit `json.loads()` geparst werden
 
 #### Einschränkungen
 
-- Kein Event-Trigger möglich – Cognos emittiert keine Events. Das Skript läuft täglich als Airflow DAG
+- Kein Event-Trigger möglich – Cognos emittiert keine Events. Täglicher Airflow DAG empfohlen
 - Änderungen am Data Module / Dashboard werden erst beim nächsten Skript-Lauf im Katalog sichtbar (max. 24h Verzögerung)
-- Cognos-Dashboards müssen als JSON exportiert und im `cognos_exports/`-Verzeichnis abgelegt werden (kein automatischer Export per Cognos REST API implementiert)
+- Lineage zu Trino-Tabellen erfordert, dass die Tabellen bereits durch den Trino-Connector in OM bekannt sind
 
 **Gesamtbild der vollständigen Lineage-Kette:**
 
@@ -408,10 +419,10 @@ dbt staging → data_vault → business_vault → marts ◀── dbt manifest.j
 Trino (Iceberg-Tabellen) ◀── Trino-Connector crawlt
     │
     ▼
-Cognos Data Model ◀── cognos_to_openmetadata.py (täglich, Airflow DAG)
+Cognos Data Model ◀── cognos_api_sync_dag (täglich, Airflow DAG)
     │
     ▼
-Cognos Dashboard + Charts ◀── cognos_to_openmetadata.py (täglich, Airflow DAG)
+Cognos Dashboard + Charts ◀── cognos_api_sync_dag (täglich, Airflow DAG)
 ```
 
 ---

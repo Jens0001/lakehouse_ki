@@ -4,6 +4,56 @@ Notizen, Erkenntnisse und wichtige Informationen, die während der Arbeit am Lak
 
 ---
 
+## Cognos REST API – Wichtige Eigenheiten (06.05.2026)
+
+Erkenntnisse aus der direkten API-Analyse für `cognos_api_sync.py`. Relevant für alle
+zukünftigen Cognos-API-Integrationen.
+
+### Response-Struktur
+- Content-Endpunkte (`GET /api/v1/content`, `/content/{id}/items`) geben Objekte unter
+  dem Key **`"content"`** zurück – nicht `"entries"` (wie ältere Dokumentation vermuten lässt)
+- 404-Responses sind normal für nicht gefundene Objekte – kein Fehler, gibt `None` zurück
+
+### Dashboard-Spezifikation (exploration-Typ)
+- Moderne interaktive Cognos-Dashboards haben den Objekttyp **`"exploration"`**
+  (nicht `"dashboard"`)
+- Spezifikation abrufen: `GET /content/{id}?fields=specification`
+  (nicht `?extensions=specification` und nicht `?details=specification`)
+- Das `specification`-Feld in der Antwort ist ein **JSON-String** → muss mit `json.loads()`
+  geparst werden, bevor man darauf zugreift
+- Die geparste Spec enthält direkt `name`, `layout`, `dataSources` – keine weitere Verschachtelung
+
+### XSRF-Token (Sicherheitsschicht)
+- Cognos schützt alle API-Endpunkte (auch lesende wie `/items`) mit einem XSRF-Token
+- Ohne Token: **403 Forbidden** mit Header `X-BI-XSRF: Rejected`
+- Token wird beim Session-Aufbau als Cookie `XSRF-TOKEN` geliefert
+- Muss bei jedem Request als Header **`X-XSRF-Token: <wert>`** mitgesendet werden
+- Token aus dem Session-Response-Cookie extrahieren (nicht aus Datei lesen)
+
+### Datenmodul-Struktur (useSpec)
+- `useSpec[].dataSourceOverride` existiert in unserem Setup **nicht**
+- Datenquellenname steht in `useSpec[].ancestors[0].defaultName`
+  (z.B. `"Lakehouse KI Trino"`)
+- Catalog und Schema aus `useSpec[].searchPath` per Regex extrahieren:
+  `dataSourceSchema[@name='iceberg/marts']` → catalog=`iceberg`, schema=`marts`
+- Query Subjects referenzieren ihren useSpec über `ref: ["M1.tabellen_name"]`:
+  - `"M1"` = useSpec-Identifier
+  - `"tabellen_name"` = physischer Tabellenname in Trino (für Lineage)
+
+### Session-Aufbau
+- Anonyme Session: `GET /api/v1/session` – funktioniert für öffentlich freigegebene Inhalte
+- Authentifiziert: zuerst `POST /api/v1/session`, dann `GET /api/v1/session/login` mit
+  `Authorization: Basic <base64(user:pass)>` Header
+- `canCallLogon: false` in der Session-Antwort bedeutet: anonymer Zugriff ausreichend
+
+### Getestete Konfiguration
+- Cognos Analytics URL: `http://192.168.178.149:9300/api/v1`
+- Anonymer Zugriff auf Teamordner → Lakehouse → Modelle und Dashboards funktioniert
+- Gefundene Objekte: 1 Datenmodul (`Lakehouse_KI`, 16 Query Subjects), 2 Dashboards
+  (`Temperatur_Durchschniitt`, `Strompreis_Durchschniitt`, beide Typ `exploration`)
+
+---
+
 ## Keycloak OIDC Issuer-URL: KEYCLOAK_HOSTNAME muss in .env persistiert werden (04.05.2026)
 
 - **Problem**: Zugriff auf Keycloak über externe IP (z.B. `http://192.168.178.81:8082`) führte
@@ -1554,78 +1604,12 @@ wait  # wartet auf alle direkten Background-Jobs
 
 ---
 
-## 🔧 Cognos Analytics → OpenMetadata Bridge (25. März 2026)
+## 🔧 Cognos Analytics → OpenMetadata Bridge (ersetzt durch cognos_api_sync.py, 06.05.2026)
 
-### Skript: `scripts/cognos_to_openmetadata.py`
-
-**Zweck**: Cognos Analytics JSON-Exporte (Datenmodule + Dashboards) in OpenMetadata ingesten. Schließt die Lineage-Lücke zwischen Trino-Tabellen und der Cognos BI-Schicht.
-
-**Klassen**:
-- `OMClient` – Minimaler REST-Client (urllib), Bearer-Auth, GET/PUT/POST/PATCH
-- `CognosDataModule` – Parser für Data Module JSON (querySubject[], relationship[], drillGroup[], customSort[])
-- `CognosOMIngester` – Erstellt OM-Entitäten: Dashboard Service, Classification+Tags, Data Models, Lineage
-
-**Datentyp-Mapping** (Cognos → OM):
-| Cognos | OpenMetadata |
-|--------|-------------|
-| BIGINT | BIGINT |
-| INTEGER | INT |
-| VARCHAR(...) | VARCHAR |
-| DATE | DATE |
-| TIME | TIME |
-| TIMESTAMP_TZ | TIMESTAMPZ |
-| DECIMAL(x,y) | DECIMAL |
-
-**Usage-Tag-Mapping**:
-- `identifier` → Classification `CognosAnalytics.Identifier`
-- `attribute` → Classification `CognosAnalytics.Attribute`
-- `fact` → Classification `CognosAnalytics.Measure`
-
-**Namenskonvention**:
-- Modul-Name: `module.label` (z.B. "Heizung Zeitverlauf Trino Lakehouse")
-- OM-Entity-Name: Sanitized Label (Leerzeichen → Unterstriche): `Heizung_Zeitverlauf_Trino_Lakehouse`
-- Data-Model FQN: `cognos_analytics.Heizung_Zeitverlauf_Trino_Lakehouse__dim_tag`
-- Matching Dashboard→Datenmodul: über `dataSources.sources[].name` == `module.label`
-
-**CLI-Aufruf**:
-```bash
-# Datenmodul Dry-Run (nur parsen + validieren):
-python3 scripts/cognos_to_openmetadata.py --dry-run -v /pfad/zu/datamodule.json
-
-# Datenmodul produktiv:
-OM_URL=http://localhost:8585/api OM_TOKEN=eyJ... python3 scripts/cognos_to_openmetadata.py /pfad/zu/datamodule.json
-
-# Dashboard Dry-Run:
-python3 scripts/cognos_to_openmetadata.py --dashboard --dry-run -v /pfad/zu/dashboard.json
-
-# Dashboard produktiv (Datenmodul muss vorher ingestiert worden sein):
-OM_URL=http://localhost:8585/api OM_TOKEN=eyJ... python3 scripts/cognos_to_openmetadata.py --dashboard /pfad/zu/dashboard.json
-```
-
-**CLI-Argumente**:
-- Positional `JSON_FILE`: Pfad zur Cognos JSON-Datei
-- `--dashboard`: Dashboard-Modus (statt Datenmodul-Modus)
-- `--dry-run`: Nur parsen, keine API-Calls
-- `-v` / `--verbose`: Debug-Logging (zeigt Slot-Mappings etc.)
-
-**Cognos Dashboard JSON – Struktur-Referenz**:
-- Widgets: `layout.items[].items[].items[]` (3 Ebenen: Tab → genericPage → Widget)
-- Widget-Typ: `type: "widget"`
-- Titel: `features.Models_internal.name.translationTable.Default`
-- Chart-Typ: `features.Models_internal.visId` (z.B. `com.ibm.vis.rave2bundlecolumn` → Bar)
-- Daten: `features.Models_internal.data.dataViews[].dataItems[].itemId` (z.B. `dim_tag.year_`)
-- Datenmodul-Referenz: `dataSources.sources[].name` = Label des Datenmoduls
-- Globale Spaltenliste: `features.MetadataLoader.metadataSubsetIds`
-- Synthetische Items (`_multiMeasuresSeries`) müssen gefiltert werden
-
-**Getestetes Datenmodul**: "Heizung Zeitverlauf Trino Lakehouse"
-- 9 Query Subjects, 48 Spalten, 8 Relationships, 1 Drill Group, 1 Custom Sort
-- Dry-Run validiert alle Spalten korrekt (Datentypen, Usage-Tags, Aggregationen)
-
-**Getestetes Dashboard**: "Jahresauswertung Heizkosten Lakehouse"
-- 6 Tabs, 13 Widgets, 21 referenzierte Spalten aus 8 Query Subjects
-- Dashboard-Dry-Run validiert: alle Tabs, Widgets, Chart-Typen, Slot-Mappings korrekt
-- visId-Mapping: bundlecolumn→Bar, rave2line→Line, bundlecomposite→Other, stackedcolumn→Bar, bundlebar→Bar
+> **Veraltet**: Das alte dateibasierte Skript `cognos_to_openmetadata.py` und der zugehörige DAG wurden entfernt.
+> Aktuelles Skript: `scripts/cognos_api_sync.py` – liest direkt von der Cognos REST API, kein manueller JSON-Export nötig.
+> Aktueller DAG: `airflow/dags/cognos_api_sync_dag.py`
+> Dokumentation: ARCHITECTURE.md Abschnitt "Cognos Data Module → Katalog Bridge"
 
 **Klassen (Dashboard-Erweiterung)**:
 - `CognosDashboard` – Parser für Dashboard JSON (Tabs, Widgets, Datenquellen, MetadataLoader)

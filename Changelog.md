@@ -4,6 +4,63 @@ Alle Änderungen und Versionshistorie des Lakehouse KI Projekts.
 
 ## [Unreleased]
 
+### OpenMetadata Lineage vervollständigt: inlets/outlets + cognos_api_sync Umzug (06.05.2026)
+
+**Airflow Dataset-Lineage aktiviert** (`open_meteo_to_raw`, `energy_charts_to_raw`):
+- `outlets=[Dataset("trino://trino:8080/iceberg.raw.*")]` auf dem `landing_to_raw`-Task
+- OpenLineage-Provider nimmt die Outlets auf und schickt sie als Output-Dataset im COMPLETE-Event an OM
+- OM matcht `namespace=trino://trino:8080` auf den Service `lakehouse_trino` und verbindet DAG → Tabelle
+- Damit ist die Kette `Airflow DAG → iceberg.raw → dbt → marts → Cognos` in OM lückenlos
+
+**`cognos_api_sync.py` nach `scripts/` verschoben**:
+- `cognos/cognos_api_sync.py` → `scripts/cognos_api_sync.py`
+- Veraltetes `scripts/cognos_to_openmetadata.py` (dateibasiert) entfernt
+- Veralteter `airflow/dags/cognos_to_openmetadata_dag.py` entfernt
+- Neuer `airflow/dags/cognos_api_sync_dag.py`: nutzt Jinja `{{ var.value.om_bot_token }}` statt Python-Subprozesse
+- `docker-compose.yml`: Volume-Mount für `cognos_api_sync.py` + `cognos/api_exports` ergänzt
+- `docker-compose.yml`: `AIRFLOW_VAR_OM_BOT_TOKEN` + `AIRFLOW_VAR_COGNOS_PASSWORD` ergänzt (auto-populated)
+- `.env.example`: `COGNOS_USERNAME` + `COGNOS_PASSWORD` Abschnitt ergänzt
+
+**Betroffene Dateien**: `airflow/dags/open_meteo_to_raw.py`, `airflow/dags/energy_charts_to_raw.py`,
+`scripts/cognos_api_sync.py` (verschoben), `airflow/dags/cognos_api_sync_dag.py` (neu),
+`docker-compose.yml`, `.env.example`
+
+---
+
+### cognos_api_sync.py: Neues Skript – Cognos API → OpenMetadata Sync mit End-to-End Lineage (06.05.2026)
+
+**Zweck**: Schließt die letzte Lineage-Lücke im Lakehouse-Stack. Liest Cognos Datenmodule
+und Dashboards direkt über die Cognos REST API aus und ingestiert sie nach OpenMetadata –
+inkl. vollständiger Lineage-Kette Trino-Tabelle → Data Model → Dashboard.
+
+**Neue Datei**: `scripts/cognos_api_sync.py`
+
+**Funktionsumfang**:
+- Traversiert die Cognos Content-Hierarchie rekursiv (Ordner → Unterordner → Objekte)
+- Unterstützt alle relevanten Cognos-Typen: `module`, `exploration`, `report`, `dashboard`, `story`
+- Exportiert JSONs lokal nach `cognos/api_exports/` (zur Inspektion und Archivierung)
+- Ingestiert nach OpenMetadata:
+  - **Datenmodule** → je QuerySubject ein `DashboardDataModel` mit Spalten, Datentypen und Usage-Tags
+  - **Dashboards** → `Dashboard` + `Chart`-Entities pro Widget
+  - **Lineage** → `PUT /v1/lineage` (Trino-Tabelle → DataModel) und `dashboard.dataModels[]` (DataModel → Dashboard)
+- Diff-Modus: nur veränderte Objekte exportieren (`--diff`)
+- Dry-Run-Modus: zeigt an, was getan werden würde (`--dry-run`)
+- Session-Management: anonym oder mit Basic Authentication (COGNOS_USERNAME/PASSWORD)
+
+**Behobene Bugs gegenüber initialem Stand** (alle durch API-Analyse ermittelt):
+- Cognos API gibt Content unter Key `"content"` zurück (nicht `"entries"`)
+- Dashboard-Typ in der API ist `"exploration"` (nicht `"dashboard"`)
+- Dashboard-Spezifikation: Parameter `fields=specification` (nicht `extensions=`); `specification`-Feld ist JSON-String → muss geparst werden
+- XSRF-Token muss bei allen Requests als Header `X-XSRF-Token` mitgesendet werden (aus Cookie-Jar lesen, nicht aus Datei)
+- `useSpec` in Datenmodulen hat keine `dataSourceOverride`-Struktur – Datenquelle aus `ancestors[0].defaultName` und `searchPath` extrahieren
+- `resp.read` war kein Aufruf sondern Methodenreferenz (immer truthy) → Body nie gelesen
+
+**Neue Umgebungsvariable**: `OM_TRINO_SVC` (default: `lakehouse_trino`) – Name des Trino-Service in OM
+
+**Betroffene Dateien**: `scripts/cognos_api_sync.py` (neu)
+
+---
+
 ### om_setup_connectors.py: Neues Skript für vollautomatisches Katalog-Setup (05.05.2026)
 
 **Problem**: Nach `docker compose down -v` war der OpenMetadata-Katalog leer. Trino-,

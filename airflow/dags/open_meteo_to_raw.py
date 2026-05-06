@@ -25,9 +25,15 @@ from datetime import datetime, timedelta, date
 
 import requests
 from airflow import DAG
+from airflow.datasets import Dataset
 from airflow.models import Variable
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.trino.hooks.trino import TrinoHook
+
+# URI-Format: trino://<host>:<port>/<catalog>.<schema>.<table>
+# Die OpenLineage-Provider-Komponente extrahiert daraus namespace=trino://trino:8080
+# und name=iceberg.raw.weather_hourly → OM matcht das auf den Service "lakehouse_trino".
+OUTLET_WEATHER_HOURLY = Dataset("trino://trino:8080/iceberg.raw.weather_hourly")
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +258,7 @@ with DAG(
     t2_load = PythonOperator(
         task_id="landing_to_raw",
         python_callable=landing_to_raw,
+        outlets=[OUTLET_WEATHER_HOURLY],
     )
 
     t1_fetch >> t2_load

@@ -46,6 +46,9 @@ dbt/target/
 # OS
 Thumbs.db
 
+#Cognos Expors
+cognos/api_exports/
+
 
 #AI
 #Claude

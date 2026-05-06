@@ -1,0 +1,1138 @@
+#!/usr/bin/env python3
+"""
+cognos_api_sync.py – Cognos Analytics API → OpenMetadata Sync
+
+Sucht über die Cognos REST API nach Dashboards und Datenmodulen im Ordner
+"Lakehouse" (und Untergeordneten), exportiert deren JSON-Definitionen und
+ingestiert sie direkt nach OpenMetadata.
+
+Funktionality:
+  --export       : Sucht nach Objekten und exportiert JSONs nach cognos/api_exports/
+  --ingest-om    : Exportiert UND ingestiert direkt nach OpenMetadata
+  --list         : Nur auflisten was gefunden würde (ohne Export)
+  --diff         : Nur neu/geänderte Objekte exportieren (basierend auf modificationTime)
+  --folder NAME  : Anderer Start-Ordner (default: Lakehouse)
+  --modules-only : Nur Datenmodule verarbeiten
+  --dashboards-only : Nur Dashboards/Reports verarbeiten
+  --dry-run      : Nichts ändern, nur anzeigen was getan würde
+  -v/--verbose   : Debug-Logging
+
+Umgebungsvariablen:
+  COGNOS_URL     Cognos API URL     (default: http://192.168.178.149:9300/api/v1)
+  COGNOS_FOLDER  Start-Ordner        (default: Lakehouse)
+  OM_URL         OpenMetadata API URL (default: http://localhost:8585/api)
+  OM_TOKEN       OpenMetadata Auth Token (required for --ingest-om)
+  EXPORT_DIR     Export-Verzeichnis   (default: cognos/api_exports)
+
+Ausführung:
+    # Nur auflisten:
+    python3 cognos/cognos_api_sync.py --list
+
+    # JSONs exportieren:
+    python3 cognos/cognos_api_sync.py --export
+
+    # Exportieren + nach OpenMetadata ingestieren:
+    python3 cognos/cognos_api_sync.py --ingest-om
+
+    # Nur geänderte Objekte (Diff-Modus):
+    python3 cognos/cognos_api_sync.py --export --diff
+
+    # Nur Datenmodule:
+    python3 cognos/cognos_api_sync.py --export --modules-only
+"""
+from __future__ import annotations
+
+import argparse
+import datetime
+import json
+import logging
+import os
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote
+
+# ---------------------------------------------------------------------------
+# Konfiguration
+# ---------------------------------------------------------------------------
+COGNOS_URL = os.environ.get("COGNOS_URL", "http://192.168.178.149:9300/api/v1")
+COGNOS_USERNAME = os.environ.get("COGNOS_USERNAME", "")
+COGNOS_PASSWORD = os.environ.get("COGNOS_PASSWORD", "")
+COGNOS_FOLDER = os.environ.get("COGNOS_FOLDER", "Lakehouse")
+OM_URL = os.environ.get("OM_URL", "http://localhost:8585/api")
+OM_TOKEN = os.environ.get("OM_TOKEN", "")
+EXPORT_DIR = os.environ.get("EXPORT_DIR", "cognos/api_exports")
+
+OM_SERVICE_NAME = "cognos_analytics"
+CLASSIFICATION_NAME = "CognosAnalytics"
+
+log = logging.getLogger("cognos_api_sync")
+
+# ---------------------------------------------------------------------------
+# Cognos usage → Classification-Tag (für Data Model Spalten)
+# ---------------------------------------------------------------------------
+_COGNOS_USAGE_MAP: dict[str, str] = {
+    "identifier": "Identifier",
+    "attribute":  "Attribute",
+    "fact":       "Measure",
+}
+
+_COGNOS_DATATYPE_MAP: dict[str, str] = {
+    "BIGINT": "BIGINT",
+    "INTEGER": "INT",
+    "INT": "INT",
+    "SMALLINT": "SMALLINT",
+    "TINYINT": "TINYINT",
+    "VARCHAR": "VARCHAR",
+    "CHAR": "CHAR",
+    "DATE": "DATE",
+    "TIME": "TIME",
+    "TIMESTAMP": "TIMESTAMP",
+    "TIMESTAMP_TZ": "TIMESTAMPZ",
+    "DECIMAL": "DECIMAL",
+    "NUMERIC": "NUMERIC",
+    "DOUBLE": "DOUBLE",
+    "FLOAT": "FLOAT",
+    "REAL": "FLOAT",
+    "BOOLEAN": "BOOLEAN",
+    "BLOB": "BLOB",
+    "CLOB": "STRING",
+    "ARRAY": "ARRAY",
+}
+
+# Cognos visId → OM ChartType Mapping
+_COGNOS_VIS_MAP: dict[str, str] = {
+    "com.ibm.vis.rave2bundlecolumn": "Bar",
+    "com.ibm.vis.rave2bundlebar": "Bar",
+    "com.ibm.vis.rave2bundlestackedcolumn": "Bar",
+    "com.ibm.vis.rave2line": "Line",
+    "com.ibm.vis.rave2bundlecomposite": "Other",
+    "com.ibm.vis.rave2bundlearea": "Area",
+    "com.ibm.vis.rave2bundlepie": "Pie",
+    "com.ibm.vis.rave2bundlescatter": "Scatter",
+    "com.ibm.vis.rave2bundletreemap": "Other",
+    "com.ibm.vis.rave2bundleheatmap": "Other",
+    "com.ibm.vis.rave2bundletable": "Table",
+    "com.ibm.vis.rave2crosstab": "Table",
+    "summary": "Text",
+}
+
+# Cognos object types
+TYPE_MODULE = "module"
+TYPE_REPORT = "report"
+TYPE_DASHBOARD = "dashboard"
+TYPE_FOLDER = "folder"
+TYPE_STORY = "story"
+
+# Dashboard-Related types
+DASHBOARD_TYPES = {TYPE_REPORT, TYPE_DASHBOARD, TYPE_STORY}
+
+
+# ---------------------------------------------------------------------------
+# Data Classes
+# ---------------------------------------------------------------------------
+@dataclass
+class CognosObject:
+    """Repräsentation eines Cognos Content-Objekts."""
+    id: str
+    type: str
+    name: str
+    path: str
+    modification_time: str = ""
+    version: str = ""
+    owner: str = ""
+    json_data: dict | None = None
+
+
+@dataclass
+class SyncStats:
+    """Statistiken beim Sync."""
+    found_modules: int = 0
+    found_dashboards: int = 0
+    exported_modules: int = 0
+    exported_dashboards: int = 0
+    updated_modules: int = 0
+    updated_dashboards: int = 0
+    skipped_unchanged: int = 0
+    errors: int = 0
+    om_created: int = 0
+    om_updated: int = 0
+    om_errors: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Cognos REST API Client
+# ---------------------------------------------------------------------------
+class CognosClient:
+    """Synchroner HTTP-Client für die Cognos Analytics REST API."""
+
+    def __init__(self, base_url: str, username: str = "", password: str = "") -> None:
+        self.base = base_url.rstrip("/")
+        self.username = username
+        self.password = password
+        self.cookies: str = ""
+        self.xsrf_token: str = ""
+        self._session_created: bool = False
+        self._jar: list[tuple[str, str]] = []  # Cookie-Jar als Liste von (name, value)
+
+    # -- Session Management ------------------------------------------------
+
+    def create_session(self) -> None:
+        """Erstellt eine Session (anonym oder mit Credentials)."""
+        if self._session_created:
+            return
+
+        # Wenn Credentials vorhanden sind, Basic Authentication verwenden
+        if self.username and self.password:
+            self._create_authenticated_session()
+        else:
+            self._create_anonymous_session()
+
+    def _create_anonymous_session(self) -> None:
+        """Erstellt eine anonyme Session."""
+        url = f"{self.base}/session"
+        req = urllib.request.Request(url)
+        try:
+            with urllib.request.urlopen(req) as resp:
+                data = json.loads(resp.read().decode())
+                log.info("Session erstellt: anonymous=%s", data.get("isAnonymous", True))
+                self._extract_cookies(resp)
+                self._session_created = True
+        except urllib.error.HTTPError as exc:
+            if exc.code == 403:
+                log.info("Session bereits aktiv (403 beim erneuten Login)")
+                self._session_created = True
+            else:
+                raise
+
+    def _create_authenticated_session(self) -> None:
+        """Erstellt eine Session mit Basic Authentication."""
+        # Schritt 1: Session erstellen
+        url = f"{self.base}/session"
+        req = urllib.request.Request(url, method="POST")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                self._extract_cookies(resp)
+                log.info("Session erstellt (Basic Auth)")
+        except urllib.error.HTTPError:
+            pass  # session endpoint kann auch leer sein
+
+        # Schritt 2: Mit Basic Auth authentifizieren
+        auth_url = f"{self.base}/session/login"
+        credentials = f"{self.username}:{self.password}".encode()
+        import base64
+        auth_header = base64.b64encode(credentials).decode()
+
+        req = urllib.request.Request(auth_url)
+        req.add_header("Authorization", f"Basic {auth_header}")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                self._extract_cookies(resp)
+                data = json.loads(resp.read().decode()) if resp.read else {}
+                log.info("Authentifiziert als: %s", data.get("userId", self.username))
+                self._session_created = True
+        except urllib.error.HTTPError as exc:
+            log.error("Authentifizierung fehlgeschlagen: %d %s", exc.code, exc.read().decode(errors="replace")[:200])
+            raise
+
+    def _extract_cookies(self, resp: Any) -> None:
+        """Extrahiert Cookies aus der Response."""
+        for cookie in resp.headers.get_all("Set-Cookie", []):
+            # Nur den Namen=Wert Teil extrahieren (bis zum ersten ;)
+            cookie_part = cookie.split(";")[0].strip()
+            if "=" in cookie_part:
+                # In (name, value) Tupel aufteilen
+                name, value = cookie_part.split("=", 1)
+                self._jar.append((name.strip(), value.strip()))
+
+    def _update_session(self) -> None:
+        """Stellt sicher dass Session und Cookies aktuell sind."""
+        if not self._session_created:
+            self.create_session()
+        # XSRF-Token aus Cookies laden
+        if not self.xsrf_token:
+            # Cookie-Datei parsen wenn vorhanden
+            cookie_file = "/tmp/cognos_cookies.txt"
+            if os.path.exists(cookie_file):
+                with open(cookie_file) as f:
+                    for line in f:
+                        if "XSRF-TOKEN" in line:
+                            parts = line.strip().split("\t")
+                            if len(parts) >= 7:
+                                self.xsrf_token = parts[6]
+                                break
+
+    def _make_request(
+        self,
+        method: str,
+        path: str,
+        data: Any = None,
+        params: dict | None = None,
+    ) -> dict | list | None:
+        """Führt einen API-Request aus mit Cookie-Handling."""
+        self._update_session()
+        url = f"{self.base}/{path.lstrip('/')}"
+
+        # Query parameters
+        if params:
+            query = "&".join(f"{k}={quote(str(v))}" for k, v in params.items())
+            url += f"?{query}"
+
+        body = json.dumps(data).encode() if data is not None else None
+        req = urllib.request.Request(url, data=body, method=method)
+
+        # Cookies zusammenbauen
+        if self._jar:
+            cookie_header = "; ".join(f"{k}={v}" for k, v in self._jar)
+            req.add_header("Cookie", cookie_header)
+        if self.xsrf_token:
+            req.add_header("X-XSRF-Token", self.xsrf_token)
+
+        try:
+            with urllib.request.urlopen(req) as resp:
+                raw = resp.read()
+                # Neue Cookies extrahieren
+                self._extract_cookies(resp)
+                return json.loads(raw.decode()) if raw else None
+        except urllib.error.HTTPError as exc:
+            body_text = exc.read().decode(errors="replace") if exc.fp else ""
+            if exc.code == 404:
+                return None
+            log.error("HTTP %s %s → %d: %s", method, url, exc.code, body_text[:500])
+            raise
+
+    # -- Public API Methods ------------------------------------------------
+
+    def get_root_content(self) -> list[dict]:
+        """Gibt alle Root-Content-Objekte zurück."""
+        result = self._make_request("GET", "/content")
+        if result and "entries" in result:
+            return result["entries"]
+        return []
+
+    def get_folder_items(self, folder_id: str) -> list[dict]:
+        """Gibt alle Child-Objekte eines Ordners zurück."""
+        result = self._make_request("GET", f"/content/{folder_id}/items")
+        if result and "entries" in result:
+            return result["entries"]
+        return []
+
+    def get_content_metadata(self, obj_id: str) -> dict | None:
+        """Gibt Metadaten eines Content-Objekts zurück."""
+        return self._make_request("GET", f"/content/{obj_id}")
+
+    def get_module_definition(self, module_id: str) -> dict | None:
+        """Gibt die vollständige JSON-Definition eines Datenmoduls zurück."""
+        return self._make_request("GET", f"/modules/{module_id}")
+
+    def get_module_metadata(self, module_id: str) -> dict | None:
+        """Gibt Metadaten eines Datenmoduls zurück."""
+        return self._make_request("GET", f"/modules/{module_id}/metadata")
+
+    def get_dashboard_spec(self, obj_id: str) -> dict | None:
+        """Gibt die JSON-Spezifikation eines Dashboards/Reports zurück."""
+        # Versucht zuerst die specification extension
+        result = self._make_request("GET", f"/content/{obj_id}", params={"extensions": "specification"})
+        if result:
+            return result
+        # Fallback: Content mit special query
+        result = self._make_request("GET", f"/content/{obj_id}?details=specification")
+        return result
+
+    def search_by_name(self, name_pattern: str) -> list[dict]:
+        """Sucht Objekte nach Namen (freetext search)."""
+        result = self._make_request("GET", "/search", params={"filter": f"name:~{name_pattern}"})
+        if result and "entries" in result:
+            return result["entries"]
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Content Explorer – rekursive traversal
+# ---------------------------------------------------------------------------
+class ContentExplorer:
+    """Traversiert die Cognos Content-Hierarchie rekursiv."""
+
+    def __init__(self, client: CognosClient) -> None:
+        self.client = client
+
+    def find_folder_by_name(self, target_name: str, start_id: str = "") -> str | None:
+        """Sucht einen Ordner nach Name (rekursiv). Gibt die ID zurück."""
+        if not start_id:
+            # Suche in Root
+            items = self.client.get_root_content()
+        else:
+            items = self.client.get_folder_items(start_id)
+
+        for item in items:
+            obj_type = item.get("type", "")
+            obj_name = item.get("defaultName", item.get("name", "")).lower()
+            obj_id = item.get("id", "")
+
+            if obj_type == TYPE_FOLDER and target_name.lower() in obj_name:
+                return obj_id
+
+            if obj_type == TYPE_FOLDER:
+                # Rekursiv in Untergeordneten suchen
+                found = self.find_folder_by_name(target_name, obj_id)
+                if found:
+                    return found
+
+        return None
+
+    def collect_objects(
+        self,
+        folder_id: str,
+        types: set[str] | None = None,
+    ) -> list[CognosObject]:
+        """Sammelt alle Objects eines Ordners und seiner Untergeordneten."""
+        if types is None:
+            types = {TYPE_MODULE, *DASHBOARD_TYPES}
+
+        objects: list[CognosObject] = []
+        items = self.client.get_folder_items(folder_id)
+
+        for item in items:
+            obj_type = item.get("type", "")
+            obj_id = item.get("id", "")
+            obj_name = item.get("defaultName", item.get("name", "unnamed"))
+            mod_time = item.get("modificationTime", "")
+            version = item.get("version", "")
+            owner = item.get("owner", "")
+
+            # Pfad zusammensetzen
+            path = item.get("objectPath", f"/{obj_name}")
+
+            if obj_type in types:
+                obj = CognosObject(
+                    id=obj_id,
+                    type=obj_type,
+                    name=obj_name,
+                    path=path,
+                    modification_time=mod_time,
+                    version=version,
+                    owner=owner,
+                )
+                objects.append(obj)
+            elif obj_type == TYPE_FOLDER:
+                # Rekursiv in Untergeordnete suchen
+                sub_objects = self.collect_objects(obj_id, types)
+                objects.extend(sub_objects)
+
+        return objects
+
+
+# ---------------------------------------------------------------------------
+# JSON Export Manager
+# ---------------------------------------------------------------------------
+class ExportManager:
+    """Verwaltet das Exportieren von JSON-Dateien."""
+
+    def __init__(self, base_dir: str, diff_mode: bool = False) -> None:
+        self.base_dir = Path(base_dir)
+        self.diff_mode = diff_mode
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def _sanitize_name(self, name: str) -> str:
+        """Ersetzt ungültige Zeichen im Dateinamen."""
+        sanitized = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", name.lower())
+        return sanitized.strip("_")
+
+    def get_export_path(self, obj: CognosObject, is_module: bool) -> Path:
+        """Gibt den Export-Pfad für ein Objekt zurück."""
+        category = "modules" if is_module else "dashboards"
+        folder_name = self._sanitize_name(COGNOS_FOLDER)
+        dir_path = self.base_dir / folder_name / category
+
+        # ID-basierter Dateiname für Eindeutigkeit
+        safe_name = self._sanitize_name(obj.name)
+        return dir_path / f"{safe_name}_{obj.id[-8:]}.json"
+
+    def should_export(self, path: Path, modification_time: str) -> bool:
+        """Prüft ob ein Export nötig ist (Diff-Modus)."""
+        if not self.diff_mode:
+            return True
+        if not path.exists():
+            return True
+        # Vergleich basierend auf modificationTime
+        try:
+            file_mtime = datetime.datetime.fromtimestamp(
+                path.stat().st_mtime, tz=datetime.timezone.utc
+            ).isoformat()
+            # modification_time kommt als ISO-8601 von Cognos
+            return modification_time != file_mtime[:19]
+        except OSError:
+            return True
+
+    def export(self, obj: CognosObject, data: dict, is_module: bool) -> Path:
+        """Schreibt die JSON-Datei."""
+        path = self.get_export_path(obj, is_module)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Metadaten hinzufügen
+        export_data = {
+            "_metadata": {
+                "cognos_id": obj.id,
+                "cognos_type": obj.type,
+                "cognos_name": obj.name,
+                "cognos_path": obj.path,
+                "cognos_modification_time": obj.modification_time,
+                "cognos_version": obj.version,
+                "exported_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            },
+            **data,
+        }
+
+        path.write_text(json.dumps(export_data, indent=2, ensure_ascii=False), encoding="utf-8")
+        log.info("  → Exportiert: %s", path)
+        return path
+
+
+# ---------------------------------------------------------------------------
+# OpenMetadata Ingestion Client (leicht angepasste Version aus cognos_to_openmetadata.py)
+# ---------------------------------------------------------------------------
+class OMClient:
+    """Synchroner HTTP-Client für die OpenMetadata REST API."""
+
+    def __init__(self, base_url: str, token: str) -> None:
+        self.base = base_url.rstrip("/")
+        if not self.base.endswith("/api"):
+            self.base += "/api"
+        self.token = token
+
+    def _request(
+        self, method: str, path: str, data: Any = None
+    ) -> dict | list | None:
+        url = f"{self.base}/{path.lstrip('/')}"
+        body = json.dumps(data).encode() if data is not None else None
+        req = urllib.request.Request(url, data=body, method=method)
+        req.add_header("Authorization", f"Bearer {self.token}")
+        req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req) as resp:
+                raw = resp.read()
+                return json.loads(raw.decode()) if raw else None
+        except urllib.error.HTTPError as exc:
+            body_text = exc.read().decode(errors="replace") if exc.fp else ""
+            if exc.code == 404:
+                return None
+            log.error("OM HTTP %s %s → %d: %s", method, url, exc.code, body_text[:500])
+            raise
+
+    def get(self, path: str) -> dict | None:
+        return self._request("GET", path)
+
+    def put(self, path: str, data: Any) -> dict:
+        return self._request("PUT", path, data)
+
+    def post(self, path: str, data: Any) -> dict:
+        return self._request("POST", path, data)
+
+    def patch(self, path: str, data: Any) -> dict:
+        return self._request("PATCH", path, data, content_type="application/json-patch+json")
+
+
+# ---------------------------------------------------------------------------
+# OpenMetadata Ingester für Cognos
+# ---------------------------------------------------------------------------
+class CognosOMIngester:
+    """Ingestet Cognos Data Modules und Dashboards nach OpenMetadata."""
+
+    CLASSIFICATION_TAGS = {
+        "Identifier": "Cognos Usage: Identifier – Eindeutiges Identifikationsmerkmal",
+        "Attribute":  "Cognos Usage: Attribute – Beschreibendes Merkmal",
+        "Measure":    "Cognos Usage: Measure/Fact – Messgröße",
+    }
+
+    def __init__(self, client: OMClient) -> None:
+        self.client = client
+        self._created = 0
+        self._updated = 0
+        self._errors = 0
+
+    def _map_datatype(self, cognos_type: str) -> tuple[str, str]:
+        raw = cognos_type.strip().upper()
+        base = re.split(r"[(\s]", raw)[0]
+        om_type = _COGNOS_DATATYPE_MAP.get(base, "STRING")
+        return om_type, cognos_type
+
+    # -- Setup ---------------------------------------------------------------
+
+    def ensure_dashboard_service(self) -> None:
+        existing = self.client.get(f"v1/services/dashboardServices/name/{OM_SERVICE_NAME}")
+        if existing:
+            log.info("Dashboard-Service '%s' existiert bereits", OM_SERVICE_NAME)
+            return
+
+        payload = {
+            "name": OM_SERVICE_NAME,
+            "displayName": "Cognos Analytics",
+            "description": "IBM Cognos Analytics – Automatisch ingestiert.",
+            "serviceType": "CustomDashboard",
+            "connection": {
+                "config": {
+                    "type": "CustomDashboard",
+                    "sourcePythonClass": "cognos_api_sync",
+                    "dashboardUrl": COGNOS_URL.replace("/api/v1", ""),
+                }
+            },
+        }
+        result = self.client.put("v1/services/dashboardServices", payload)
+        log.info("Dashboard-Service '%s' erstellt", OM_SERVICE_NAME)
+
+    def ensure_classification_and_tags(self) -> None:
+        existing = self.client.get(f"v1/classifications/name/{CLASSIFICATION_NAME}")
+        if not existing:
+            self.client.put("v1/classifications", {
+                "name": CLASSIFICATION_NAME,
+                "displayName": "Cognos Analytics",
+                "description": "Tags für Cognos Analytics Datenmodul-Metadaten.",
+            })
+            log.info("Classification '%s' erstellt", CLASSIFICATION_NAME)
+
+        for tag_name, tag_desc in self.CLASSIFICATION_TAGS.items():
+            tag_existing = self.client.get(f"v1/tags/name/{CLASSIFICATION_NAME}.{tag_name}")
+            if not tag_existing:
+                self.client.post("v1/tags", {
+                    "name": tag_name,
+                    "displayName": tag_name,
+                    "description": tag_desc,
+                    "classification": CLASSIFICATION_NAME,
+                })
+
+    # -- Data Model Ingestion ------------------------------------------------
+
+    def _build_columns(self, items: list[dict]) -> list[dict]:
+        columns = []
+        for item_wrapper in items:
+            qi = item_wrapper.get("queryItem")
+            if not qi:
+                continue
+            om_type, display_type = self._map_datatype(qi.get("datatype", "VARCHAR"))
+            usage = qi.get("usage", "")
+            tag_name = _COGNOS_USAGE_MAP.get(usage)
+
+            desc_parts = []
+            if qi.get("label") and qi.get("label") != qi.get("identifier"):
+                desc_parts.append(f"Label: {qi['label']}")
+            desc_parts.append(f"Usage: {usage}")
+            agg = qi.get("regularAggregate", "")
+            if agg:
+                desc_parts.append(f"Aggregation: {agg}")
+
+            col: dict[str, Any] = {
+                "name": qi.get("identifier", qi.get("expression", "unknown")),
+                "displayName": qi.get("label", qi.get("identifier", "")),
+                "dataType": om_type,
+                "dataTypeDisplay": display_type,
+                "description": " | ".join(desc_parts),
+            }
+
+            if tag_name:
+                col["tags"] = [{
+                    "tagFQN": f"{CLASSIFICATION_NAME}.{tag_name}",
+                    "source": "Classification",
+                    "labelType": "Automated",
+                    "state": "Confirmed",
+                }]
+            columns.append(col)
+        return columns
+
+    def ingest_data_model(
+        self,
+        qs: dict,
+        module_name: str,
+        module_label: str,
+        datasource_name: str,
+        catalog: str,
+        schema: str,
+    ) -> str | None:
+        qs_id = qs.get("identifier", "unknown")
+        qs_label = qs.get("label", qs_id)
+        model_name = f"{module_name}__{qs_id}"
+        columns = self._build_columns(qs.get("item", []))
+
+        description = (
+            f"**Cognos Data Module**: {module_label}\n"
+            f"**Datenquelle**: {datasource_name} → `{catalog}.{schema}`\n"
+            f"**Query Subject**: {qs_id}"
+        )
+
+        payload = {
+            "name": model_name,
+            "displayName": f"{qs_label} ({module_label})",
+            "description": description,
+            "service": OM_SERVICE_NAME,
+            "dataModelType": "Other",
+            "serviceType": "CustomDashboard",
+            "columns": columns,
+        }
+
+        try:
+            result = self.client.put("v1/dashboard/datamodels", payload)
+            fqn = result.get("fullyQualifiedName", "")
+            if result.get("version", 0.0) <= 0.1:
+                self._created += 1
+                log.info("    ✓ Data Model erstellt: %s", fqn)
+            else:
+                self._updated += 1
+                log.info("    ↻ Data Model aktualisiert: %s", fqn)
+            return result.get("id")
+        except urllib.error.HTTPError as exc:
+            self._errors += 1
+            log.error("    ✗ Fehler bei Data Model '%s': %s", model_name, exc)
+            return None
+
+    def ingest_module(self, module_data: dict, export_path: str = "") -> None:
+        identifier = module_data.get("identifier", "unknown")
+        label = module_data.get("label", identifier)
+        sanitized = re.sub(r"[^a-zA-Z0-9_]+", "_", label).strip("_")
+
+        use_spec = module_data.get("useSpec", [{}])[0] if module_data.get("useSpec") else {}
+        ds_override = use_spec.get("dataSourceOverride", {})
+        datasource_name = ds_override.get("cmDataSource", "Unknown")
+        catalog = ds_override.get("catalog", "iceberg")
+        schema = ds_override.get("schema", "smarthome")
+
+        log.info("  Ingest Data Module: %s (%s)", label, identifier)
+        log.info("    DS: %s → %s.%s", datasource_name, catalog, schema)
+
+        self.ensure_dashboard_service()
+        self.ensure_classification_and_tags()
+
+        for qs in module_data.get("querySubject", []):
+            qs_id = qs.get("identifier", "unknown")
+            log.info("    Verarbeite Query Subject: %s", qs_id)
+            self.ingest_data_model(
+                qs, sanitized, label, datasource_name, catalog, schema
+            )
+
+    # -- Dashboard Ingestion -----------------------------------------------
+
+    def _extract_widgets(self, node: dict) -> list[dict]:
+        widgets = []
+        for child in node.get("items", []):
+            if child.get("type") == "widget":
+                w = self._parse_widget(child)
+                if w:
+                    widgets.append(w)
+            elif "items" in child:
+                widgets.extend(self._extract_widgets(child))
+        return widgets
+
+    def _parse_widget(self, node: dict) -> dict | None:
+        features = node.get("features", {})
+        model = features.get("Models_internal", {})
+        if not model:
+            return None
+
+        vis_id = model.get("visId", "")
+        name_table = model.get("name", {}).get("translationTable", {})
+        widget_name = name_table.get("Default", "")
+
+        columns: list[str] = []
+        data = model.get("data", {})
+        for dv in data.get("dataViews", []):
+            for di in dv.get("dataItems", []):
+                item_id = di.get("itemId", "")
+                if item_id and not item_id.startswith("_"):
+                    columns.append(item_id)
+
+        return {
+            "id": node.get("id", ""),
+            "name": widget_name,
+            "visId": vis_id,
+            "chartType": _COGNOS_VIS_MAP.get(vis_id, "Other"),
+            "columns": columns,
+        }
+
+    def _extract_tabs(self, layout: dict) -> list[dict]:
+        tabs = []
+        for item in layout.get("items", []):
+            if item.get("type") == "container":
+                title_table = item.get("title", {}).get("translationTable", {})
+                tab_title = title_table.get("Default", "")
+                tab_widgets = self._extract_widgets(item)
+                tabs.append({"title": tab_title, "widgets": tab_widgets})
+            elif item.get("type") == "widget":
+                w = self._parse_widget(item)
+                if w:
+                    tabs.append({"title": "Widget", "widgets": [w]})
+        return tabs
+
+    def ingest_dashboard(self, dashboard_data: dict, export_path: str = "") -> None:
+        dash_name = dashboard_data.get("name", "Unbekanntes Dashboard")
+        sanitized = re.sub(r"[^a-zA-Z0-9_]+", "_", dash_name).strip("_")
+
+        layout = dashboard_data.get("layout", {})
+        tabs = self._extract_tabs(layout)
+        all_widgets = [w for tab in tabs for w in tab.get("widgets", [])]
+
+        # Datenquellen ermitteln
+        sources_section = dashboard_data.get("dataSources", {})
+        sources = sources_section.get("sources", [])
+        source_names = [s.get("name", "") for s in sources if s.get("name")]
+
+        log.info("  Ingest Dashboard: %s", dash_name)
+        log.info("    Tabs: %d, Widgets: %d", len(tabs), len(all_widgets))
+        log.info("    Datenmodule: %s", ", ".join(source_names) or "keine")
+
+        self.ensure_dashboard_service()
+
+        # Charts erstellen
+        chart_fqns = []
+        for widget in all_widgets:
+            chart_name = f"{sanitized}__{re.sub(r'[^a-zA-Z0-9_]+', '_', widget.get('name', '')).strip('_') or widget.get('id', '')}"
+            payload = {
+                "name": chart_name,
+                "displayName": widget.get("name", widget.get("id", "")),
+                "description": f"**Dashboard**: {dash_name}\n**Typ**: {widget.get('chartType', 'Other')}",
+                "service": OM_SERVICE_NAME,
+                "serviceType": "CustomDashboard",
+                "chartType": widget.get("chartType", "Other"),
+            }
+            try:
+                result = self.client.put("v1/charts", payload)
+                fqn = result.get("fullyQualifiedName", "")
+                if result.get("version", 0.0) <= 0.1:
+                    self._created += 1
+                else:
+                    self._updated += 1
+                chart_fqns.append(fqn)
+            except urllib.error.HTTPError as exc:
+                self._errors += 1
+                log.error("    ✗ Chart-Fehler: %s", exc)
+
+        # Dashboard erstellen
+        description = f"**Cognos Dashboard**: {dash_name}\n**Datenmodule**: {', '.join(source_names) or 'keine'}"
+        if tabs:
+            description += "\n\n### Tabs\n"
+            for tab in tabs:
+                wnames = [w.get("name", "?") for w in tab.get("widgets", [])]
+                description += f"- **{tab.get('title', '?')}** ({len(wnames)} Widgets)\n"
+
+        payload = {
+            "name": sanitized,
+            "displayName": dash_name,
+            "description": description,
+            "service": OM_SERVICE_NAME,
+            "serviceType": "CustomDashboard",
+            "charts": [{"fullyQualifiedName": fqn} for fqn in chart_fqns],
+        }
+
+        try:
+            result = self.client.put("v1/dashboards", payload)
+            fqn = result.get("fullyQualifiedName", "")
+            if result.get("version", 0.0) <= 0.1:
+                self._created += 1
+                log.info("  ✓ Dashboard erstellt: %s", fqn)
+            else:
+                self._updated += 1
+                log.info("  ↻ Dashboard aktualisiert: %s", fqn)
+        except urllib.error.HTTPError as exc:
+            self._errors += 1
+            log.error("  ✗ Dashboard-Fehler: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Main Sync Logic
+# ---------------------------------------------------------------------------
+def run_sync(
+    cognos_client: CognosClient,
+    folder_name: str,
+    stats: SyncStats,
+    export_manager: ExportManager,
+    do_export: bool,
+    do_ingest: bool,
+    do_list: bool,
+    types_filter: set[str] | None,
+    om_client: OMClient | None,
+) -> None:
+    """Haupt-Sync-Logik."""
+
+    # 1. Content-Explorer starten
+    explorer = ContentExplorer(cognos_client)
+
+    # 2. Folder-ID finden
+    log.info("Suche Ordner: '%s'", folder_name)
+    folder_id = explorer.find_folder_by_name(folder_name)
+    if not folder_id:
+        # Liste Root auf zur Fehlersuche
+        root = cognos_client.get_root_content()
+        root_names = [f"{i.get('type')}/{i.get('defaultName', '?')}" for i in root[:20]]
+        log.error("Ordner '%s' nicht gefunden!", folder_name)
+        log.info("Verfügbare Root-Objekte (erste 20):")
+        for name in root_names:
+            log.info("  - %s", name)
+        stats.errors += 1
+        return
+
+    log.info("Ordner gefunden: ID=%s", folder_id[-8:])
+
+    # 3. Objects sammeln
+    log.info("Sammelt Objekte aus Ordner '%s'...", folder_name)
+    objects = explorer.collect_objects(folder_id, types_filter)
+
+    modules = [o for o in objects if o.type == TYPE_MODULE]
+    dashboards = [o for o in objects if o.type in DASHBOARD_TYPES]
+
+    stats.found_modules = len(modules)
+    stats.found_dashboards = len(dashboards)
+
+    log.info("Gefunden: %d Module, %d Dashboards/Reports", len(modules), len(dashboards))
+
+    if do_list:
+        log.info("")
+        log.info("=" * 70)
+        log.info("LISTE DER GEFUNDENEN OBJEKTE")
+        log.info("=" * 70)
+        for m in modules:
+            log.info("[MODULE] %s  (id=%s, modified=%s)", m.name, m.id[-8:], m.modification_time)
+        for d in dashboards:
+            log.info("[DASHBOARD] %s  (id=%s, modified=%s)", d.name, d.id[-8:], d.modification_time)
+        log.info("=" * 70)
+        return
+
+    # 4. Datenmodule exportieren und ingestiern
+    for mod_obj in modules:
+        try:
+            log.info("Verarbeite Module: %s (id=%s)", mod_obj.name, mod_obj.id[-8:])
+            module_data = cognos_client.get_module_definition(mod_obj.id)
+            if not module_data:
+                log.warning("  Konnte JSON nicht abrufen, überspringe")
+                stats.errors += 1
+                continue
+
+            # JSON speichern
+            if do_export:
+                path = export_manager.export(mod_obj, module_data, is_module=True)
+                log.info("  → JSON gespeichert: %s", path)
+            else:
+                path = ""
+
+            # Nach OpenMetadata ingestieren
+            if do_ingest and om_client:
+                ingester = CognosOMIngester(om_client)
+                ingester.ingest_module(module_data, str(path))
+
+        except Exception as exc:
+            stats.errors += 1
+            log.error("  ✗ Fehler bei Module '%s': %s", mod_obj.name, exc)
+
+    # 5. Dashboards exportieren und ingestiern
+    for dash_obj in dashboards:
+        try:
+            log.info("Verarbeite Dashboard: %s (id=%s)", dash_obj.name, dash_obj.id[-8:])
+            dash_data = cognos_client.get_dashboard_spec(dash_obj.id)
+            if not dash_data:
+                log.warning("  Konnte JSON nicht abrufen, überspringe")
+                stats.errors += 1
+                continue
+
+            # JSON speichern
+            if do_export:
+                path = export_manager.export(dash_obj, dash_data, is_module=False)
+                log.info("  → JSON gespeichert: %s", path)
+            else:
+                path = ""
+
+            # Nach OpenMetadata ingestieren
+            if do_ingest and om_client:
+                ingester = CognosOMIngester(om_client)
+                ingester.ingest_dashboard(dash_data, str(path))
+
+        except Exception as exc:
+            stats.errors += 1
+            log.error("  ✗ Fehler bei Dashboard '%s': %s", dash_obj.name, exc)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Cognos Analytics API Sync – JSON Export + OpenMetadata Ingestion",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Beispiele:
+    # Nur auflisten was gefunden würde:
+    python3 cognos/cognos_api_sync.py --list
+
+    # JSONs exportieren:
+    python3 cognos/cognos_api_sync.py --export
+
+    # Exportieren + nach OpenMetadata ingestieren:
+    export OM_TOKEN='eyJ...'
+    python3 cognos/cognos_api_sync.py --ingest-om
+
+    # Nur Datenmodule, Diff-Modus:
+    python3 cognos/cognos_api_sync.py --export --diff --modules-only
+
+    # Anderer Ordner:
+    python3 cognos/cognos_api_sync.py --export --folder "MeinOrdner"
+
+Umgebungsvariablen:
+    COGNOS_URL     Cognos API URL       (default: http://192.168.178.149:9300/api/v1)
+    COGNOS_FOLDER  Start-Ordner          (default: Lakehouse)
+    OM_URL         OpenMetadata API URL  (default: http://localhost:8585/api)
+    OM_TOKEN       OpenMetadata Auth Token
+        """,
+    )
+    parser.add_argument(
+        "--export",
+        action="store_true",
+        help="JSON-Dateien exportieren",
+    )
+    parser.add_argument(
+        "--ingest-om",
+        action="store_true",
+        help="Exportieren UND nach OpenMetadata ingestieren",
+    )
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="Nur auflisten was gefunden würde",
+    )
+    parser.add_argument(
+        "--diff",
+        action="store_true",
+        help="Nur neu/geänderte Objekte exportieren",
+    )
+    parser.add_argument(
+        "--folder",
+        type=str,
+        default=None,
+        help="Anderer Start-Ordner (default: aus COGNOS_FOLDER oder 'Lakehouse')",
+    )
+    parser.add_argument(
+        "--modules-only",
+        action="store_true",
+        help="Nur Datenmodule verarbeiten",
+    )
+    parser.add_argument(
+        "--dashboards-only",
+        action="store_true",
+        help="Nur Dashboards/Reports verarbeiten",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Nicht ändern, nur anzeigen",
+    )
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Debug-Logging",
+    )
+    parser.add_argument(
+        "--cognos-user",
+        type=str,
+        default=None,
+        help="Cognos Benutzername (oder über COGNOS_USERNAME)",
+    )
+    parser.add_argument(
+        "--cognos-pass",
+        type=str,
+        default=None,
+        help="Cognos Passwort (oder über COGNOS_PASSWORD)",
+    )
+    args = parser.parse_args()
+
+    # Credentials合并 mit Environment Variables
+    username = args.cognos_user or COGNOS_USERNAME
+    password = args.cognos_pass or COGNOS_PASSWORD
+
+    # Logging konfigurieren
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s [%(levelname)-7s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    # Typ-Filter setzen
+    if args.modules_only:
+        types_filter = {TYPE_MODULE}
+    elif args.dashboards_only:
+        types_filter = DASHBOARD_TYPES.copy()
+    else:
+        types_filter = {TYPE_MODULE, *DASHBOARD_TYPES}
+
+    # Ordner-Name
+    folder_name = args.folder or COGNOS_FOLDER
+
+    # Stats
+    stats = SyncStats()
+
+    log.info("=" * 70)
+    log.info("Cognos API Sync")
+    log.info("  Cognos URL:     %s", COGNOS_URL)
+    log.info("  Authentifiziert: %s", "Ja" if username else "Nein (anonym)")
+    log.info("  Ordner:         %s", folder_name)
+    log.info("  Export-Dir:     %s", EXPORT_DIR)
+    log.info("  Aktionen:       export=%s, ingest-om=%s, list=%s, diff=%s",
+             args.export or args.ingest_om, args.ingest_om, args.list, args.diff)
+    log.info("=" * 70)
+
+    # Dry-Run: Kein echter API-Call nötig
+    if args.dry_run:
+        log.info("DRY RUN – keine Änderungen")
+        # Immer noch Session aufbauen für Info
+        client = CognosClient(COGNOS_URL)
+        client.create_session()
+        log.info("Cognos API erreichbar.")
+        return
+
+    # 1. Cognos Client
+    cognos_client = CognosClient(COGNOS_URL, username, password)
+    cognos_client.create_session()
+
+    # 2. Export Manager
+    export_manager = ExportManager(EXPORT_DIR, diff_mode=args.diff)
+
+    # 3. OpenMetadata Client (optional)
+    om_client = None
+    if args.ingest_om:
+        if not OM_TOKEN:
+            log.error("Kein OM_TOKEN gesetzt für OpenMetadata Ingestion.")
+            log.error("  Export: export OM_TOKEN='eyJ...'")
+            sys.exit(1)
+        om_client = OMClient(OM_URL, OM_TOKEN)
+        log.info("OpenMetadata: %s", OM_URL)
+
+    # 4. Sync starten
+    run_sync(
+        cognos_client=cognos_client,
+        folder_name=folder_name,
+        stats=stats,
+        export_manager=export_manager,
+        do_export=args.export or args.ingest_om,
+        do_ingest=args.ingest_om,
+        do_list=args.list,
+        types_filter=types_filter,
+        om_client=om_client,
+    )
+
+    # 5. Zusammenfassung
+    log.info("")
+    log.info("=" * 70)
+    log.info("ZUSAMMENFASSUNG")
+    log.info("=" * 70)
+    log.info("Gefunden:    %d Module, %d Dashboards", stats.found_modules, stats.found_dashboards)
+    log.info("Exportiert:  %d Module, %d Dashboards", stats.exported_modules, stats.exported_dashboards)
+    log.info("Übersprungen (unchanged): %d", stats.skipped_unchanged)
+    if args.ingest_om:
+        log.info("OM erstellt:  %d", stats.om_created)
+        log.info("OM aktualisiert: %d", stats.om_updated)
+        log.info("OM Fehler:    %d", stats.om_errors)
+    log.info("Fehler:       %d", stats.errors)
+    log.info("=" * 70)
+
+
+if __name__ == "__main__":
+    main()

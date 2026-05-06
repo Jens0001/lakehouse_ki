@@ -1,0 +1,3306 @@
+{
+  "version": "22.0",
+  "container": "C",
+  "use": [
+    "iB8F3A2C1D9E4F5A6B7C8D9E0F1A2B3C"
+  ],
+  "useSpec": [
+    {
+      "identifier": "M1",
+      "type": "database",
+      "storeID": "iB8F3A2C1D9E4F5A6B7C8D9E0F1A2B3C",
+      "ancestors": [
+        {
+          "defaultName": "Postgres",
+          "storeID": "i6821DD61FE364DB1958C0000A3811E02"
+        },
+        {
+          "defaultName": "Postgres",
+          "storeID": "iD511A8C78429448685BA4A8C149AEDB7"
+        }
+      ],
+      "dataCacheExpiry": "3600",
+      "dataSourceOverride": {
+        "originalCMDataSource": "Postgres",
+        "originalCatalog": "",
+        "originalSchema": "business_vault",
+        "overrideCMDataSource": false,
+        "overrideCatalog": false,
+        "overrideSchema": false,
+        "cmDataSource": "Postgres",
+        "catalog": "",
+        "schema": "business_vault"
+      }
+    }
+  ],
+  "expressionLocale": "de-de",
+  "lastModified": "2026-05-05T21:00:00",
+  "querySubject": [
+    {
+      "ref": ["M1.dim_date"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cDate" }
+            ],
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "dim_date.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "full_date",
+            "usage": "identifier",
+            "datatype": "DATE",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "date",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cDate" }
+            ],
+            "identifier": "full_date",
+            "label": "Full Date",
+            "idForExpression": "dim_date.full_date"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "year",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cYear" }
+            ],
+            "identifier": "year",
+            "label": "Year",
+            "idForExpression": "dim_date.year"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "quarter",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cQuarter" }
+            ],
+            "identifier": "quarter",
+            "label": "Quarter",
+            "idForExpression": "dim_date.quarter"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "month",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cMonth" }
+            ],
+            "identifier": "month",
+            "label": "Month",
+            "idForExpression": "dim_date.month"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "week",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cWeek" }
+            ],
+            "identifier": "week",
+            "label": "Week",
+            "idForExpression": "dim_date.week"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "day",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cDay" }
+            ],
+            "identifier": "day",
+            "label": "Day",
+            "idForExpression": "dim_date.day"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "weekday",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cDay" }
+            ],
+            "identifier": "weekday",
+            "label": "Weekday",
+            "idForExpression": "dim_date.weekday"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "weekday_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(50)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "weekday_name",
+            "label": "Weekday Name",
+            "idForExpression": "dim_date.weekday_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "is_weekend",
+            "usage": "identifier",
+            "datatype": "BOOLEAN",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "is_weekend",
+            "label": "Is Weekend",
+            "idForExpression": "dim_date.is_weekend"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "day_of_year",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "day_of_year",
+            "label": "Day of Year",
+            "idForExpression": "dim_date.day_of_year"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "date_id",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "full_date", "sqlOperator": "minimum" },
+              { "itemRef": "year", "sqlOperator": "minimum" },
+              { "itemRef": "quarter", "sqlOperator": "minimum" },
+              { "itemRef": "month", "sqlOperator": "minimum" },
+              { "itemRef": "week", "sqlOperator": "minimum" },
+              { "itemRef": "day", "sqlOperator": "minimum" },
+              { "itemRef": "weekday", "sqlOperator": "minimum" },
+              { "itemRef": "weekday_name", "sqlOperator": "minimum" },
+              { "itemRef": "is_weekend", "sqlOperator": "minimum" },
+              { "itemRef": "day_of_year", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_date_id",
+            "label": "primary key: date_id"
+          }
+        ]
+      },
+      "identifier": "dim_date",
+      "label": "dim_date",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_date",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":600,\"y\":100}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.dim_time"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "time_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "time_id",
+            "label": "Time ID",
+            "idForExpression": "dim_time.time_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "hour",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "hour",
+            "label": "Hour",
+            "idForExpression": "dim_time.hour"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "minute_of_hour",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "minute_of_hour",
+            "label": "Minute of Hour",
+            "idForExpression": "dim_time.minute_of_hour"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "label",
+            "usage": "identifier",
+            "datatype": "VARCHAR(10)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "label",
+            "label": "Time Label",
+            "idForExpression": "dim_time.label"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "period",
+            "usage": "identifier",
+            "datatype": "VARCHAR(20)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "period",
+            "label": "Period",
+            "idForExpression": "dim_time.period"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "is_peak",
+            "usage": "identifier",
+            "datatype": "BOOLEAN",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "is_peak",
+            "label": "Is Peak",
+            "idForExpression": "dim_time.is_peak"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "time_id",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "hour", "sqlOperator": "minimum" },
+              { "itemRef": "minute_of_hour", "sqlOperator": "minimum" },
+              { "itemRef": "label", "sqlOperator": "minimum" },
+              { "itemRef": "period", "sqlOperator": "minimum" },
+              { "itemRef": "is_peak", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_time_id",
+            "label": "primary key: time_id"
+          }
+        ]
+      },
+      "identifier": "dim_time",
+      "label": "dim_time",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_time",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":600,\"y\":300}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.dim_location"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "location_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "location_sk",
+            "label": "Location SK",
+            "idForExpression": "dim_location.location_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "location_hk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "location_hk",
+            "label": "Location HK",
+            "idForExpression": "dim_location.location_hk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "location_key",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "location_key",
+            "label": "Location Key",
+            "idForExpression": "dim_location.location_key"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "latitude",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "latitude",
+            "label": "Latitude",
+            "idForExpression": "dim_location.latitude"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "longitude",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "longitude",
+            "label": "Longitude",
+            "idForExpression": "dim_location.longitude"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valid_from",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valid_from",
+            "label": "Valid From",
+            "idForExpression": "dim_location.valid_from"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "location_sk",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "location_hk", "sqlOperator": "minimum" },
+              { "itemRef": "location_key", "sqlOperator": "minimum" },
+              { "itemRef": "latitude", "sqlOperator": "minimum" },
+              { "itemRef": "longitude", "sqlOperator": "minimum" },
+              { "itemRef": "valid_from", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_location_sk",
+            "label": "primary key: location_sk"
+          }
+        ]
+      },
+      "identifier": "dim_location",
+      "label": "dim_location",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_location",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":100,\"y\":300}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.dim_country"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "country_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "country_sk",
+            "label": "Country SK",
+            "idForExpression": "dim_country.country_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "country_hk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "country_hk",
+            "label": "Country HK",
+            "idForExpression": "dim_country.country_hk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "region_code",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "region_code",
+            "label": "Region Code",
+            "idForExpression": "dim_country.region_code"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "country_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "country_name",
+            "label": "Country Name",
+            "idForExpression": "dim_country.country_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valid_from",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valid_from",
+            "label": "Valid From",
+            "idForExpression": "dim_country.valid_from"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "country_sk",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "country_hk", "sqlOperator": "minimum" },
+              { "itemRef": "region_code", "sqlOperator": "minimum" },
+              { "itemRef": "country_name", "sqlOperator": "minimum" },
+              { "itemRef": "valid_from", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_country_sk",
+            "label": "primary key: country_sk"
+          }
+        ]
+      },
+      "identifier": "dim_country",
+      "label": "dim_country",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_country",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":100,\"y\":500}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.dim_artist"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "artist_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "artist_sk",
+            "label": "Artist SK",
+            "idForExpression": "dim_artist.artist_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "artist_hk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "artist_hk",
+            "label": "Artist HK",
+            "idForExpression": "dim_artist.artist_hk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "artist_bk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "artist_bk",
+            "label": "Artist BK",
+            "idForExpression": "dim_artist.artist_bk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "artist_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "artist_name",
+            "label": "Artist Name",
+            "idForExpression": "dim_artist.artist_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "genres",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "genres",
+            "label": "Genres",
+            "idForExpression": "dim_artist.genres"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "popularity",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "popularity",
+            "label": "Popularity",
+            "idForExpression": "dim_artist.popularity"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "followers",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "followers",
+            "label": "Followers",
+            "idForExpression": "dim_artist.followers"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valid_from",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valid_from",
+            "label": "Valid From",
+            "idForExpression": "dim_artist.valid_from"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valid_to",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valid_to",
+            "label": "Valid To",
+            "idForExpression": "dim_artist.valid_to"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "version_number",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "version_number",
+            "label": "Version Number",
+            "idForExpression": "dim_artist.version_number"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "is_current",
+            "usage": "identifier",
+            "datatype": "BOOLEAN",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "is_current",
+            "label": "Is Current",
+            "idForExpression": "dim_artist.is_current"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "artist_sk",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "artist_hk", "sqlOperator": "minimum" },
+              { "itemRef": "artist_bk", "sqlOperator": "minimum" },
+              { "itemRef": "artist_name", "sqlOperator": "minimum" },
+              { "itemRef": "genres", "sqlOperator": "minimum" },
+              { "itemRef": "popularity", "sqlOperator": "minimum" },
+              { "itemRef": "followers", "sqlOperator": "minimum" },
+              { "itemRef": "valid_from", "sqlOperator": "minimum" },
+              { "itemRef": "valid_to", "sqlOperator": "minimum" },
+              { "itemRef": "version_number", "sqlOperator": "minimum" },
+              { "itemRef": "is_current", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_artist_sk",
+            "label": "primary key: artist_sk"
+          }
+        ]
+      },
+      "identifier": "dim_artist",
+      "label": "dim_artist",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_artist",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":100,\"y\":700}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.dim_track"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "track_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_sk",
+            "label": "Track SK",
+            "idForExpression": "dim_track.track_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "track_hk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_hk",
+            "label": "Track HK",
+            "idForExpression": "dim_track.track_hk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "track_id",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_id",
+            "label": "Track ID",
+            "idForExpression": "dim_track.track_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "track_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_name",
+            "label": "Track Name",
+            "idForExpression": "dim_track.track_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "album_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "album_name",
+            "label": "Album Name",
+            "idForExpression": "dim_track.album_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "duration_ms",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "duration_ms",
+            "label": "Duration (ms)",
+            "idForExpression": "dim_track.duration_ms"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "explicit",
+            "usage": "identifier",
+            "datatype": "BOOLEAN",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "explicit",
+            "label": "Explicit",
+            "idForExpression": "dim_track.explicit"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "popularity",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "popularity",
+            "label": "Popularity",
+            "idForExpression": "dim_track.popularity"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "track_genre",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_genre",
+            "label": "Track Genre",
+            "idForExpression": "dim_track.track_genre"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "danceability",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "danceability",
+            "label": "Danceability",
+            "idForExpression": "dim_track.danceability"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "energy",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "energy",
+            "label": "Energy",
+            "idForExpression": "dim_track.energy"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "musical_key",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "musical_key",
+            "label": "Musical Key",
+            "idForExpression": "dim_track.musical_key"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "loudness",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "loudness",
+            "label": "Loudness",
+            "idForExpression": "dim_track.loudness"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "musical_mode",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "musical_mode",
+            "label": "Musical Mode",
+            "idForExpression": "dim_track.musical_mode"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "speechiness",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "speechiness",
+            "label": "Speechiness",
+            "idForExpression": "dim_track.speechiness"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "acousticness",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "acousticness",
+            "label": "Acousticness",
+            "idForExpression": "dim_track.acousticness"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "instrumentalness",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "instrumentalness",
+            "label": "Instrumentalness",
+            "idForExpression": "dim_track.instrumentalness"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "liveness",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "liveness",
+            "label": "Liveness",
+            "idForExpression": "dim_track.liveness"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valence",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valence",
+            "label": "Valence",
+            "idForExpression": "dim_track.valence"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "tempo",
+            "usage": "identifier",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "tempo",
+            "label": "Tempo",
+            "idForExpression": "dim_track.tempo"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "time_signature",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "time_signature",
+            "label": "Time Signature",
+            "idForExpression": "dim_track.time_signature"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valid_from",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valid_from",
+            "label": "Valid From",
+            "idForExpression": "dim_track.valid_from"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "track_sk",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "track_hk", "sqlOperator": "minimum" },
+              { "itemRef": "track_id", "sqlOperator": "minimum" },
+              { "itemRef": "track_name", "sqlOperator": "minimum" },
+              { "itemRef": "album_name", "sqlOperator": "minimum" },
+              { "itemRef": "duration_ms", "sqlOperator": "minimum" },
+              { "itemRef": "explicit", "sqlOperator": "minimum" },
+              { "itemRef": "popularity", "sqlOperator": "minimum" },
+              { "itemRef": "track_genre", "sqlOperator": "minimum" },
+              { "itemRef": "danceability", "sqlOperator": "minimum" },
+              { "itemRef": "energy", "sqlOperator": "minimum" },
+              { "itemRef": "musical_key", "sqlOperator": "minimum" },
+              { "itemRef": "loudness", "sqlOperator": "minimum" },
+              { "itemRef": "musical_mode", "sqlOperator": "minimum" },
+              { "itemRef": "speechiness", "sqlOperator": "minimum" },
+              { "itemRef": "acousticness", "sqlOperator": "minimum" },
+              { "itemRef": "instrumentalness", "sqlOperator": "minimum" },
+              { "itemRef": "liveness", "sqlOperator": "minimum" },
+              { "itemRef": "valence", "sqlOperator": "minimum" },
+              { "itemRef": "tempo", "sqlOperator": "minimum" },
+              { "itemRef": "time_signature", "sqlOperator": "minimum" },
+              { "itemRef": "valid_from", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_track_sk",
+            "label": "primary key: track_sk"
+          }
+        ]
+      },
+      "identifier": "dim_track",
+      "label": "dim_track",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_track",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":100,\"y\":900}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.dim_price_zone"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "price_zone_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "price_zone_sk",
+            "label": "Price Zone SK",
+            "idForExpression": "dim_price_zone.price_zone_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_zone_hk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "price_zone_hk",
+            "label": "Price Zone HK",
+            "idForExpression": "dim_price_zone.price_zone_hk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "bidding_zone",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "bidding_zone",
+            "label": "Bidding Zone",
+            "idForExpression": "dim_price_zone.bidding_zone"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "valid_from",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "valid_from",
+            "label": "Valid From",
+            "idForExpression": "dim_price_zone.valid_from"
+          }
+        }
+      ],
+      "itemNormalization": {
+        "itemNormalizationGroup": [
+          {
+            "key": {
+              "itemRef": "price_zone_sk",
+              "keyConstraint": "unique",
+              "keyComposition": "independent"
+            },
+            "attribute": [
+              { "itemRef": "price_zone_hk", "sqlOperator": "minimum" },
+              { "itemRef": "bidding_zone", "sqlOperator": "minimum" },
+              { "itemRef": "valid_from", "sqlOperator": "minimum" }
+            ],
+            "identifier": "grp_4_PK_price_zone_sk",
+            "label": "primary key: price_zone_sk"
+          }
+        ]
+      },
+      "identifier": "dim_price_zone",
+      "label": "dim_price_zone",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "dim_price_zone",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":1100,\"y\":500}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.fact_weather_hourly"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "location_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "location_sk",
+            "label": "Location SK",
+            "idForExpression": "fact_weather_hourly.location_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "fact_weather_hourly.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "time_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "time_id",
+            "label": "Time ID",
+            "idForExpression": "fact_weather_hourly.time_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temperature",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temperature",
+            "label": "Temperature (°C)",
+            "idForExpression": "fact_weather_hourly.temperature"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "apparent_temperature",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "apparent_temperature",
+            "label": "Apparent Temperature (°C)",
+            "idForExpression": "fact_weather_hourly.apparent_temperature"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "precipitation",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "precipitation",
+            "label": "Precipitation (mm)",
+            "idForExpression": "fact_weather_hourly.precipitation"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "rain",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "rain",
+            "label": "Rain (mm)",
+            "idForExpression": "fact_weather_hourly.rain"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "windspeed",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "windspeed",
+            "label": "Wind Speed (km/h)",
+            "idForExpression": "fact_weather_hourly.windspeed"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "sunrise_time",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "sunrise_time",
+            "label": "Sunrise Time",
+            "idForExpression": "fact_weather_hourly.sunrise_time"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "sunset_time",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "sunset_time",
+            "label": "Sunset Time",
+            "idForExpression": "fact_weather_hourly.sunset_time"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "sun_duration",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "sun_duration",
+            "label": "Sun Duration (sec)",
+            "idForExpression": "fact_weather_hourly.sun_duration"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "weather_code",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "weather_code",
+            "label": "Weather Code",
+            "idForExpression": "fact_weather_hourly.weather_code"
+          }
+        }
+      ],
+      "identifier": "fact_weather_hourly",
+      "label": "fact_weather_hourly",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "fact_weather_hourly",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":600,\"y\":300}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.fact_weather_daily"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "location_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "location_sk",
+            "label": "Location SK",
+            "idForExpression": "fact_weather_daily.location_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "fact_weather_daily.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temperature_max",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temperature_max",
+            "label": "Temperature Max (°C)",
+            "idForExpression": "fact_weather_daily.temperature_max"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temperature_min",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temperature_min",
+            "label": "Temperature Min (°C)",
+            "idForExpression": "fact_weather_daily.temperature_min"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temperature_noon",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temperature_noon",
+            "label": "Temperature Noon (°C)",
+            "idForExpression": "fact_weather_daily.temperature_noon"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temperature_morning",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temperature_morning",
+            "label": "Temperature Morning (°C)",
+            "idForExpression": "fact_weather_daily.temperature_morning"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temperature_evening",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temperature_evening",
+            "label": "Temperature Evening (°C)",
+            "idForExpression": "fact_weather_daily.temperature_evening"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "precipitation_total",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "precipitation_total",
+            "label": "Precipitation Total (mm)",
+            "idForExpression": "fact_weather_daily.precipitation_total"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "windspeed_max",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "windspeed_max",
+            "label": "Wind Speed Max (km/h)",
+            "idForExpression": "fact_weather_daily.windspeed_max"
+          }
+        }
+      ],
+      "identifier": "fact_weather_daily",
+      "label": "fact_weather_daily",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "fact_weather_daily",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":900,\"y\":300}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.fact_energy_price_hourly"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "price_zone_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "price_zone_sk",
+            "label": "Price Zone SK",
+            "idForExpression": "fact_energy_price_hourly.price_zone_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "fact_energy_price_hourly.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "time_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "time_id",
+            "label": "Time ID",
+            "idForExpression": "fact_energy_price_hourly.time_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_eur_mwh",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_eur_mwh",
+            "label": "Price (EUR/MWh)",
+            "idForExpression": "fact_energy_price_hourly.price_eur_mwh"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "bidding_zone",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "bidding_zone",
+            "label": "Bidding Zone",
+            "idForExpression": "fact_energy_price_hourly.bidding_zone"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "load_date",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "load_date",
+            "label": "Load Date",
+            "idForExpression": "fact_energy_price_hourly.load_date"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "_source_file",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "hidden": "true",
+            "identifier": "_source_file",
+            "label": "Source File",
+            "idForExpression": "fact_energy_price_hourly._source_file"
+          }
+        }
+      ],
+      "identifier": "fact_energy_price_hourly",
+      "label": "fact_energy_price_hourly",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "fact_energy_price_hourly",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":600,\"y\":500}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.fact_energy_price_daily"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "price_zone_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "price_zone_sk",
+            "label": "Price Zone SK",
+            "idForExpression": "fact_energy_price_daily.price_zone_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "fact_energy_price_daily.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_avg",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_avg",
+            "label": "Price Avg (EUR/MWh)",
+            "idForExpression": "fact_energy_price_daily.price_avg"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_min",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_min",
+            "label": "Price Min (EUR/MWh)",
+            "idForExpression": "fact_energy_price_daily.price_min"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_max",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_max",
+            "label": "Price Max (EUR/MWh)",
+            "idForExpression": "fact_energy_price_daily.price_max"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "load_date",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "load_date",
+            "label": "Load Date",
+            "idForExpression": "fact_energy_price_daily.load_date"
+          }
+        }
+      ],
+      "identifier": "fact_energy_price_daily",
+      "label": "fact_energy_price_daily",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "fact_energy_price_daily",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":900,\"y\":500}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.fact_energy_price_monthly"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "price_zone_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "price_zone_sk",
+            "label": "Price Zone SK",
+            "idForExpression": "fact_energy_price_monthly.price_zone_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "fact_energy_price_monthly.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_avg",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_avg",
+            "label": "Price Avg (EUR/MWh)",
+            "idForExpression": "fact_energy_price_monthly.price_avg"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_min",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_min",
+            "label": "Price Min (EUR/MWh)",
+            "idForExpression": "fact_energy_price_monthly.price_min"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_max",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_max",
+            "label": "Price Max (EUR/MWh)",
+            "idForExpression": "fact_energy_price_monthly.price_max"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "load_date",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "load_date",
+            "label": "Load Date",
+            "idForExpression": "fact_energy_price_monthly.load_date"
+          }
+        }
+      ],
+      "identifier": "fact_energy_price_monthly",
+      "label": "fact_energy_price_monthly",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "fact_energy_price_monthly",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":1200,\"y\":500}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.fact_chart_entry"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "country_sk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "country_sk",
+            "label": "Country SK",
+            "idForExpression": "fact_chart_entry.country_sk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "date_id",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "date_id",
+            "label": "Date ID",
+            "idForExpression": "fact_chart_entry.date_id"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "chart_hashdiff",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "chart_hashdiff",
+            "label": "Chart HashDiff",
+            "idForExpression": "fact_chart_entry.chart_hashdiff"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "country_hk",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "country_hk",
+            "label": "Country HK",
+            "idForExpression": "fact_chart_entry.country_hk"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "track_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_name",
+            "label": "Track Name",
+            "idForExpression": "fact_chart_entry.track_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "artist_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "artist_name",
+            "label": "Artist Name",
+            "idForExpression": "fact_chart_entry.artist_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "chart_date",
+            "usage": "identifier",
+            "datatype": "DATE",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "date",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "chart_date",
+            "label": "Chart Date",
+            "idForExpression": "fact_chart_entry.chart_date"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "position",
+            "usage": "fact",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "position",
+            "label": "Position",
+            "idForExpression": "fact_chart_entry.position"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "streams",
+            "usage": "fact",
+            "datatype": "BIGINT",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "streams",
+            "label": "Streams",
+            "idForExpression": "fact_chart_entry.streams"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "region",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "region",
+            "label": "Region",
+            "idForExpression": "fact_chart_entry.region"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "chart_type",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "chart_type",
+            "label": "Chart Type",
+            "idForExpression": "fact_chart_entry.chart_type"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "trend",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "trend",
+            "label": "Trend",
+            "idForExpression": "fact_chart_entry.trend"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "url",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "url",
+            "label": "URL",
+            "idForExpression": "fact_chart_entry.url"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "load_date",
+            "usage": "identifier",
+            "datatype": "TIMESTAMP",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "datetime",
+            "highlevelDatatype": "datetime",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "load_date",
+            "label": "Load Date",
+            "idForExpression": "fact_chart_entry.load_date"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "_source_file",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "hidden": "true",
+            "identifier": "_source_file",
+            "label": "Source File",
+            "idForExpression": "fact_chart_entry._source_file"
+          }
+        }
+      ],
+      "identifier": "fact_chart_entry",
+      "label": "fact_chart_entry",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "fact_chart_entry",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":600,\"y\":700}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.weather_trends"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "location_key",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "location_key",
+            "label": "Location Key",
+            "idForExpression": "weather_trends.location_key"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "granularity",
+            "usage": "identifier",
+            "datatype": "VARCHAR(10)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "granularity",
+            "label": "Granularity",
+            "idForExpression": "weather_trends.granularity"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "period_label",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "period_label",
+            "label": "Period Label",
+            "idForExpression": "weather_trends.period_label"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "year",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cYear" }
+            ],
+            "identifier": "year",
+            "label": "Year",
+            "idForExpression": "weather_trends.year"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "month",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cMonth" }
+            ],
+            "identifier": "month",
+            "label": "Month",
+            "idForExpression": "weather_trends.month"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "week",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cWeek" }
+            ],
+            "identifier": "week",
+            "label": "Week",
+            "idForExpression": "weather_trends.week"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temp_avg",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temp_avg",
+            "label": "Temp Avg (°C)",
+            "idForExpression": "weather_trends.temp_avg"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temp_min",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temp_min",
+            "label": "Temp Min (°C)",
+            "idForExpression": "weather_trends.temp_min"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "temp_max",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "temp_max",
+            "label": "Temp Max (°C)",
+            "idForExpression": "weather_trends.temp_max"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "precipitation_total",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "precipitation_total",
+            "label": "Precipitation Total (mm)",
+            "idForExpression": "weather_trends.precipitation_total"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "windspeed_avg",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "windspeed_avg",
+            "label": "Wind Speed Avg (km/h)",
+            "idForExpression": "weather_trends.windspeed_avg"
+          }
+        }
+      ],
+      "identifier": "weather_trends",
+      "label": "weather_trends",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "weather_trends",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":300,\"y\":500}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.energy_price_trends"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "bidding_zone",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "bidding_zone",
+            "label": "Bidding Zone",
+            "idForExpression": "energy_price_trends.bidding_zone"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "granularity",
+            "usage": "identifier",
+            "datatype": "VARCHAR(10)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "granularity",
+            "label": "Granularity",
+            "idForExpression": "energy_price_trends.granularity"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "period_label",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "period_label",
+            "label": "Period Label",
+            "idForExpression": "energy_price_trends.period_label"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "year",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "false",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cYear" }
+            ],
+            "identifier": "year",
+            "label": "Year",
+            "idForExpression": "energy_price_trends.year"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "month",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cMonth" }
+            ],
+            "identifier": "month",
+            "label": "Month",
+            "idForExpression": "energy_price_trends.month"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "week",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cWeek" }
+            ],
+            "identifier": "week",
+            "label": "Week",
+            "idForExpression": "energy_price_trends.week"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_avg",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_avg",
+            "label": "Price Avg (EUR/MWh)",
+            "idForExpression": "energy_price_trends.price_avg"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_min",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_min",
+            "label": "Price Min (EUR/MWh)",
+            "idForExpression": "energy_price_trends.price_min"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_max",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_max",
+            "label": "Price Max (EUR/MWh)",
+            "idForExpression": "energy_price_trends.price_max"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "price_stddev",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "price_stddev",
+            "label": "Price StdDev",
+            "idForExpression": "energy_price_trends.price_stddev"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "negative_price_hours",
+            "usage": "fact",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "negative_price_hours",
+            "label": "Negative Price Hours",
+            "idForExpression": "energy_price_trends.negative_price_hours"
+          }
+        }
+      ],
+      "identifier": "energy_price_trends",
+      "label": "energy_price_trends",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "energy_price_trends",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":600,\"y\":900}"
+        }
+      ]
+    },
+    {
+      "ref": ["M1.artist_chart_performance"],
+      "item": [
+        {
+          "queryItem": {
+            "expression": "artist_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "artist_name",
+            "label": "Artist Name",
+            "idForExpression": "artist_chart_performance.artist_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "track_name",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "track_name",
+            "label": "Track Name",
+            "idForExpression": "artist_chart_performance.track_name"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "period_type",
+            "usage": "identifier",
+            "datatype": "VARCHAR(10)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "period_type",
+            "label": "Period Type",
+            "idForExpression": "artist_chart_performance.period_type"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "period_label",
+            "usage": "identifier",
+            "datatype": "VARCHAR(8192)",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "string",
+            "highlevelDatatype": "string",
+            "facetDefinition": { "enabled": "automatic" },
+            "identifier": "period_label",
+            "label": "Period Label",
+            "idForExpression": "artist_chart_performance.period_label"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "year",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cYear" }
+            ],
+            "identifier": "year",
+            "label": "Year",
+            "idForExpression": "artist_chart_performance.year"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "week",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cWeek" }
+            ],
+            "identifier": "week",
+            "label": "Week",
+            "idForExpression": "artist_chart_performance.week"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "month",
+            "usage": "identifier",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "countDistinct",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "automatic" },
+            "taxonomy": [
+              { "domain": "cognos", "class": "cTime", "family": "cMonth" }
+            ],
+            "identifier": "month",
+            "label": "Month",
+            "idForExpression": "artist_chart_performance.month"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "entry_count",
+            "usage": "fact",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "entry_count",
+            "label": "Entry Count",
+            "idForExpression": "artist_chart_performance.entry_count"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "best_position",
+            "usage": "fact",
+            "datatype": "INTEGER",
+            "nullable": "true",
+            "regularAggregate": "minimum",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "best_position",
+            "label": "Best Position",
+            "idForExpression": "artist_chart_performance.best_position"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "avg_position",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "avg_position",
+            "label": "Avg Position",
+            "idForExpression": "artist_chart_performance.avg_position"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "total_streams",
+            "usage": "fact",
+            "datatype": "BIGINT",
+            "nullable": "true",
+            "regularAggregate": "total",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "integer",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "total_streams",
+            "label": "Total Streams",
+            "idForExpression": "artist_chart_performance.total_streams"
+          }
+        },
+        {
+          "queryItem": {
+            "expression": "avg_streams",
+            "usage": "fact",
+            "datatype": "DOUBLE",
+            "nullable": "true",
+            "regularAggregate": "average",
+            "datatypeCategory": "number",
+            "highlevelDatatype": "decimal",
+            "facetDefinition": { "enabled": "false" },
+            "identifier": "avg_streams",
+            "label": "Avg Streams",
+            "idForExpression": "artist_chart_performance.avg_streams"
+          }
+        }
+      ],
+      "identifier": "artist_chart_performance",
+      "label": "artist_chart_performance",
+      "propertyOverride": [
+        "NEW",
+        "property._MUI_diagramNodePosition"
+      ],
+      "idForExpression": "artist_chart_performance",
+      "property": [
+        {
+          "name": "_MUI_diagramNodePosition",
+          "value": "{\"x\":900,\"y\":700}"
+        }
+      ]
+    }
+  ],
+  "relationship": [
+    {
+      "left": {
+        "ref": "fact_weather_hourly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_location",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "location_sk",
+          "rightRef": "location_sk",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_weather_hourly_dim_location",
+      "label": "fact_weather_hourly<-->dim_location",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_weather_hourly_dim_location"
+    },
+    {
+      "left": {
+        "ref": "fact_weather_hourly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_date",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "date_id",
+          "rightRef": "date_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_weather_hourly_dim_date",
+      "label": "fact_weather_hourly<-->dim_date",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_weather_hourly_dim_date"
+    },
+    {
+      "left": {
+        "ref": "fact_weather_hourly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_time",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "time_id",
+          "rightRef": "time_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_weather_hourly_dim_time",
+      "label": "fact_weather_hourly<-->dim_time",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_weather_hourly_dim_time"
+    },
+    {
+      "left": {
+        "ref": "fact_weather_daily",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_location",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "location_sk",
+          "rightRef": "location_sk",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_weather_daily_dim_location",
+      "label": "fact_weather_daily<-->dim_location",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_weather_daily_dim_location"
+    },
+    {
+      "left": {
+        "ref": "fact_weather_daily",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_date",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "date_id",
+          "rightRef": "date_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_weather_daily_dim_date",
+      "label": "fact_weather_daily<-->dim_date",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_weather_daily_dim_date"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_hourly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_price_zone",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "price_zone_sk",
+          "rightRef": "price_zone_sk",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_hourly_dim_price_zone",
+      "label": "fact_energy_price_hourly<-->dim_price_zone",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_hourly_dim_price_zone"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_hourly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_date",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "date_id",
+          "rightRef": "date_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_hourly_dim_date",
+      "label": "fact_energy_price_hourly<-->dim_date",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_hourly_dim_date"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_hourly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_time",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "time_id",
+          "rightRef": "time_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_hourly_dim_time",
+      "label": "fact_energy_price_hourly<-->dim_time",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_hourly_dim_time"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_daily",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_price_zone",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "price_zone_sk",
+          "rightRef": "price_zone_sk",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_daily_dim_price_zone",
+      "label": "fact_energy_price_daily<-->dim_price_zone",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_daily_dim_price_zone"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_daily",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_date",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "date_id",
+          "rightRef": "date_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_daily_dim_date",
+      "label": "fact_energy_price_daily<-->dim_date",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_daily_dim_date"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_monthly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_price_zone",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "price_zone_sk",
+          "rightRef": "price_zone_sk",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_monthly_dim_price_zone",
+      "label": "fact_energy_price_monthly<-->dim_price_zone",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_monthly_dim_price_zone"
+    },
+    {
+      "left": {
+        "ref": "fact_energy_price_monthly",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_date",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "date_id",
+          "rightRef": "date_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_energy_price_monthly_dim_date",
+      "label": "fact_energy_price_monthly<-->dim_date",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_energy_price_monthly_dim_date"
+    },
+    {
+      "left": {
+        "ref": "fact_chart_entry",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_country",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "country_sk",
+          "rightRef": "country_sk",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_chart_entry_dim_country",
+      "label": "fact_chart_entry<-->dim_country",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_chart_entry_dim_country"
+    },
+    {
+      "left": {
+        "ref": "fact_chart_entry",
+        "mincard": "one",
+        "maxcard": "many"
+      },
+      "right": {
+        "ref": "dim_date",
+        "mincard": "one",
+        "maxcard": "one"
+      },
+      "link": [
+        {
+          "leftRef": "date_id",
+          "rightRef": "date_id",
+          "comparisonOperator": "equalTo"
+        }
+      ],
+      "joinFilterType": "none",
+      "identifier": "fact_chart_entry_dim_date",
+      "label": "fact_chart_entry<-->dim_date",
+      "propertyOverride": [
+        "NEW"
+      ],
+      "idForExpression": "fact_chart_entry_dim_date"
+    }
+  ],
+  "metadataTreeView": [
+    {
+      "folderItem": [
+        { "ref": "dim_date" },
+        { "ref": "dim_time" },
+        { "ref": "dim_location" },
+        { "ref": "dim_country" },
+        { "ref": "dim_artist" },
+        { "ref": "dim_track" },
+        { "ref": "dim_price_zone" },
+        { "ref": "fact_weather_hourly" },
+        { "ref": "fact_weather_daily" },
+        { "ref": "fact_energy_price_hourly" },
+        { "ref": "fact_energy_price_daily" },
+        { "ref": "fact_energy_price_monthly" },
+        { "ref": "fact_chart_entry" },
+        { "ref": "weather_trends" },
+        { "ref": "energy_price_trends" },
+        { "ref": "artist_chart_performance" }
+      ]
+    }
+  ],
+  "drillGroup": [
+    {
+      "segment": [
+        {
+          "ref": "dim_date.year",
+          "identifier": "year",
+          "label": "Year",
+          "propertyOverride": [
+            "NEW",
+            "label"
+          ]
+        },
+        {
+          "ref": "dim_date.month",
+          "identifier": "month",
+          "label": "Month",
+          "propertyOverride": [
+            "NEW",
+            "label"
+          ]
+        },
+        {
+          "ref": "dim_date.full_date",
+          "identifier": "full_date",
+          "label": "Full Date",
+          "propertyOverride": [
+            "NEW",
+            "label"
+          ]
+        }
+      ],
+      "identifier": "drill_group_time",
+      "label": "Time Hierarchy",
+      "propertyOverride": [
+        "NEW",
+        "label"
+      ],
+      "idForExpression": "drill_group_time"
+    }
+  ],
+  "parameterValueSet": [
+    {
+      "identifier": "_default",
+      "propertyOverride": [
+        "NEW"
+      ]
+    }
+  ],
+  "dataRetrievalMode": "liveConnection",
+  "refActiveParameterValueSet": "_default",
+  "identifier": "C_business_vault_marts",
+  "label": "Business Vault & Marts",
+  "propertyOverride": [
+    "refActiveParameterValueSet",
+    "identifier",
+    "label",
+    "property._MUI_diagramZoomAndPan"
+  ],
+  "property": [
+    {
+      "name": "_MUI_diagramZoomAndPan",
+      "value": "{\"scale\":1.0,\"translate\":[0,0]}"
+    }
+  ]
+}
