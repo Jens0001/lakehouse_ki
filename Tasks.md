@@ -228,7 +228,7 @@
       `start.sh` beim Stack-Start aus der OM-API geholt und in `.env` gespeichert.
     - **Details**: Memory.md Eintrag 28, Changelog.md 04.05.2026
     - [x] **Explizite Lineage-Definition (outlets) in DAGs ergänzt** *(erledigt 06.05.2026)*:
-      - `open_meteo_to_raw` + `energy_charts_to_raw`: `outlets=[Dataset("trino://trino:8080/iceberg.raw.*")]`
+      - `open_meteo_to_raw` + `energy_charts_to_raw`: `outlets=[Dataset("trino://trino:8080/iceberg/raw/*")]`
       - OpenLineage-Provider nimmt Outlets auf → OM verbindet DAG → Tabelle beim nächsten Run
   - **Was sichtbar wird**:
     - DAG `open_meteo_to_raw`: Runtime-Lineage pro Task-Run mit START/COMPLETE Events

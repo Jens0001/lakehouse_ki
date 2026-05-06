@@ -36,10 +36,10 @@ from airflow.models import Variable
 from airflow.providers.standard.operators.python import PythonOperator
 from airflow.providers.trino.hooks.trino import TrinoHook
 
-# URI-Format: trino://<host>:<port>/<catalog>.<schema>.<table>
+# URI-Format: trino://<host>:<port>/<catalog>/<schema>/<table>  (Slash-Trennung, nicht Punkte)
 # Die OpenLineage-Provider-Komponente extrahiert daraus namespace=trino://trino:8080
 # und name=iceberg.raw.energy_price_hourly → OM matcht das auf den Service "lakehouse_trino".
-OUTLET_ENERGY_PRICE_HOURLY = Dataset("trino://trino:8080/iceberg.raw.energy_price_hourly")
+OUTLET_ENERGY_PRICE_HOURLY = Dataset("trino://trino:8080/iceberg/raw/energy_price_hourly")
 
 
 # ---------------------------------------------------------------------------
